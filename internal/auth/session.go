@@ -3,13 +3,30 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gorilla/securecookie"
 )
+
+// Errors for session management
+var (
+	ErrMissingSessionKey = errors.New("session keys not configured")
+	ErrInvalidSessionKey = errors.New("invalid session key format")
+)
+
+// SessionConfig holds session manager configuration
+type SessionConfig struct {
+	// IsSecure sets the Secure flag on cookies (true for HTTPS)
+	IsSecure bool
+	// AllowInsecureKeys allows random key generation in dev mode
+	// If false and keys are missing, NewSessionManager returns an error
+	AllowInsecureKeys bool
+}
 
 // SessionManager handles secure cookie encoding/decoding
 type SessionManager struct {
@@ -23,39 +40,71 @@ type SessionData struct {
 	CreatedAt int64 `json:"created_at"`
 }
 
+// Track whether we've already warned about missing keys (warn only once)
+var (
+	keyWarningOnce sync.Once
+	keyWarningMsg  string
+)
+
 // NewSessionManager creates a new session manager.
-// Keys are read from environment or generated randomly (not recommended for production).
-func NewSessionManager(isSecure bool) *SessionManager {
-	hashKey := getOrGenerateKey("SESSION_HASH_KEY", 32)
-	blockKey := getOrGenerateKey("SESSION_BLOCK_KEY", 32)
+// In production (AllowInsecureKeys=false), returns error if keys are not configured.
+// In development (AllowInsecureKeys=true), generates random keys with a warning.
+func NewSessionManager(cfg SessionConfig) (*SessionManager, error) {
+	hashKey, err := getKey("SESSION_HASH_KEY", 32, cfg.AllowInsecureKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	blockKey, err := getKey("SESSION_BLOCK_KEY", 32, cfg.AllowInsecureKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	// Log warning once if using random keys
+	keyWarningOnce.Do(func() {
+		if keyWarningMsg != "" {
+			log.Println(keyWarningMsg)
+		}
+	})
 
 	sc := securecookie.New(hashKey, blockKey)
 	sc.MaxAge(30 * 24 * 60 * 60) // 30 days
 
 	return &SessionManager{
 		sc:       sc,
-		isSecure: isSecure,
-	}
+		isSecure: cfg.IsSecure,
+	}, nil
 }
 
-// getOrGenerateKey reads key from environment or generates a random one
-func getOrGenerateKey(envVar string, length int) []byte {
+// getKey reads key from environment or generates a random one if allowed
+func getKey(envVar string, length int, allowRandom bool) ([]byte, error) {
 	keyHex := os.Getenv(envVar)
 	if keyHex != "" {
 		key, err := hex.DecodeString(keyHex)
-		if err == nil && len(key) >= length {
-			return key[:length]
+		if err != nil {
+			return nil, ErrInvalidSessionKey
 		}
-		log.Printf("Warning: %s is invalid, generating random key", envVar)
+		if len(key) < length {
+			return nil, ErrInvalidSessionKey
+		}
+		return key[:length], nil
+	}
+
+	// Key not set
+	if !allowRandom {
+		return nil, ErrMissingSessionKey
 	}
 
 	// Generate random key (sessions won't persist across restarts)
 	key := make([]byte, length)
 	if _, err := rand.Read(key); err != nil {
-		log.Fatalf("Failed to generate session key: %v", err)
+		return nil, err
 	}
-	log.Printf("Warning: %s not set, using random key (sessions won't persist)", envVar)
-	return key
+
+	// Store warning message to log once
+	keyWarningMsg = "WARNING: Session keys not configured. Using random keys - sessions will not persist across server restarts. Set SESSION_HASH_KEY and SESSION_BLOCK_KEY environment variables for production."
+
+	return key, nil
 }
 
 // SetSession creates a signed session cookie

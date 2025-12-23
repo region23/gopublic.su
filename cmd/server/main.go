@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"gopublic/internal/dashboard"
 	"gopublic/internal/ingress"
@@ -11,10 +12,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/acme/autocert"
 )
+
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Load .env file if it exists
@@ -24,14 +28,18 @@ func main() {
 	// 1. Initialize Database
 	// It will create the file in the current working directory.
 	// In Docker, we set WORKDIR to /app/data to persist it.
-	storage.InitDB("gopublic.db")
-	// storage.SeedData() // Disable auto-seed in favor of real auth
+	if err := storage.InitDB("gopublic.db"); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
 
 	// 2. Initialize Registry
 	registry := server.NewTunnelRegistry()
 
 	// 3. Initialize Dashboard
-	dashHandler := dashboard.NewHandler()
+	dashHandler, err := dashboard.NewHandler()
+	if err != nil {
+		log.Fatalf("Failed to initialize dashboard: %v", err)
+	}
 
 	// 4. Configure TLS & Autocert (if applicable)
 	domain := os.Getenv("DOMAIN_NAME")
@@ -63,9 +71,13 @@ func main() {
 	// 5. Start Control Plane (TCP :4443)
 	// Pass TLS config ONLY if we are in production (non-insecure) mode
 	controlPlane := server.NewServer(":4443", registry, tlsConfig)
+
+	// Channel to collect server errors
+	serverErrors := make(chan error, 4)
+
 	go func() {
 		if err := controlPlane.Start(); err != nil {
-			log.Fatalf("Control Plane failed: %v", err)
+			serverErrors <- err
 		}
 	}()
 
@@ -76,32 +88,42 @@ func main() {
 	} else {
 		ingressPort = ":8080"
 	}
-	ingress := ingress.NewIngress(ingressPort, registry, dashHandler)
+	ing := ingress.NewIngress(ingressPort, registry, dashHandler)
 
 	// Enable HTTPS only if domain is set AND not explicitly disabled
 	useTLS := domain != "" && !insecureMode
+
+	// Track HTTP servers for graceful shutdown
+	var httpServers []*http.Server
 
 	if useTLS {
 		// --- HTTPS Mode (Production) ---
 		// TLS Ingress (443)
 		httpsServer := &http.Server{
 			Addr:      ":443",
-			Handler:   ingress.Handler(),
+			Handler:   ing.Handler(),
 			TLSConfig: tlsConfig,
 		}
+		httpServers = append(httpServers, httpsServer)
 
 		go func() {
 			log.Println("Public Ingress listening on :443 (HTTPS)")
-			if err := httpsServer.ListenAndServeTLS("", ""); err != nil {
-				log.Fatalf("HTTPS Ingress failed: %v", err)
+			if err := httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				serverErrors <- err
 			}
 		}()
 
 		// HTTP Redirect Server (80)
+		httpRedirectServer := &http.Server{
+			Addr:    ":80",
+			Handler: autocertManager.HTTPHandler(nil),
+		}
+		httpServers = append(httpServers, httpRedirectServer)
+
 		go func() {
 			log.Println("Redirect Server listening on :80 (HTTP)")
-			if err := http.ListenAndServe(":80", autocertManager.HTTPHandler(nil)); err != nil {
-				log.Fatalf("HTTP Redirect Server failed: %v", err)
+			if err := httpRedirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				serverErrors <- err
 			}
 		}()
 
@@ -113,16 +135,45 @@ func main() {
 			log.Printf("DOMAIN_NAME not set. Starting in HTTP-only mode (Local Dev). Listening on %s", ingressPort)
 		}
 
+		httpServer := &http.Server{
+			Addr:    ingressPort,
+			Handler: ing.Handler(),
+		}
+		httpServers = append(httpServers, httpServer)
+
 		go func() {
-			if err := ingress.Start(); err != nil {
-				log.Fatalf("Ingress failed: %v", err)
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				serverErrors <- err
 			}
 		}()
 	}
 
-	// Wait for interrupt
+	// Wait for interrupt or server error
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shutting down server...")
+
+	select {
+	case sig := <-quit:
+		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+	case err := <-serverErrors:
+		log.Printf("Server error: %v, initiating shutdown...", err)
+	}
+
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// Shutdown all HTTP servers
+	for _, srv := range httpServers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP server shutdown error: %v", err)
+		}
+	}
+
+	// Shutdown control plane
+	if err := controlPlane.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Control plane shutdown error: %v", err)
+	}
+
+	log.Println("Server shutdown complete")
 }

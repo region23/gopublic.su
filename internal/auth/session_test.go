@@ -6,8 +6,21 @@ import (
 	"testing"
 )
 
+// Helper to create a session manager for tests (allows random keys)
+func newTestSessionManager(t *testing.T) *SessionManager {
+	t.Helper()
+	sm, err := NewSessionManager(SessionConfig{
+		IsSecure:          false,
+		AllowInsecureKeys: true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create session manager: %v", err)
+	}
+	return sm
+}
+
 func TestSessionManager_SetAndGetSession(t *testing.T) {
-	sm := NewSessionManager(false)
+	sm := newTestSessionManager(t)
 
 	// Create a response recorder
 	w := httptest.NewRecorder()
@@ -56,7 +69,7 @@ func TestSessionManager_SetAndGetSession(t *testing.T) {
 }
 
 func TestSessionManager_InvalidCookie(t *testing.T) {
-	sm := NewSessionManager(false)
+	sm := newTestSessionManager(t)
 
 	// Create request with invalid cookie
 	req := httptest.NewRequest("GET", "/", nil)
@@ -73,7 +86,7 @@ func TestSessionManager_InvalidCookie(t *testing.T) {
 }
 
 func TestSessionManager_NoCookie(t *testing.T) {
-	sm := NewSessionManager(false)
+	sm := newTestSessionManager(t)
 
 	req := httptest.NewRequest("GET", "/", nil)
 
@@ -84,7 +97,7 @@ func TestSessionManager_NoCookie(t *testing.T) {
 }
 
 func TestSessionManager_ClearSession(t *testing.T) {
-	sm := NewSessionManager(false)
+	sm := newTestSessionManager(t)
 
 	w := httptest.NewRecorder()
 	sm.ClearSession(w)
@@ -100,4 +113,21 @@ func TestSessionManager_ClearSession(t *testing.T) {
 	}
 
 	t.Fatal("Session cookie not found in response")
+}
+
+func TestNewSessionManager_FailsWithoutKeysInProductionMode(t *testing.T) {
+	// Production mode: AllowInsecureKeys = false
+	// Without SESSION_HASH_KEY and SESSION_BLOCK_KEY set, should fail
+	_, err := NewSessionManager(SessionConfig{
+		IsSecure:          true,
+		AllowInsecureKeys: false,
+	})
+
+	if err == nil {
+		t.Error("NewSessionManager should fail in production mode without session keys")
+	}
+
+	if err != ErrMissingSessionKey {
+		t.Errorf("Expected ErrMissingSessionKey, got %v", err)
+	}
 }

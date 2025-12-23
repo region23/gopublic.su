@@ -3,11 +3,9 @@ package dashboard
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"fmt"
-	"gopublic/internal/auth"
-	"gopublic/internal/models"
-	"gopublic/internal/storage"
 	"html/template"
 	"log"
 	"net/http"
@@ -16,9 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"embed"
-
 	"github.com/gin-gonic/gin"
+
+	"gopublic/internal/auth"
+	"gopublic/internal/models"
+	"gopublic/internal/storage"
 )
 
 //go:embed templates/*
@@ -31,16 +31,28 @@ type Handler struct {
 	Session  *auth.SessionManager
 }
 
-func NewHandler() *Handler {
+func NewHandler() (*Handler, error) {
 	domain := os.Getenv("DOMAIN_NAME")
 	isSecure := domain != "" && domain != "localhost" && domain != "127.0.0.1"
+
+	// In dev mode (insecure), allow random session keys
+	// In production (secure), require proper session keys
+	sessionCfg := auth.SessionConfig{
+		IsSecure:          isSecure,
+		AllowInsecureKeys: !isSecure, // Only allow random keys in dev mode
+	}
+
+	sessionMgr, err := auth.NewSessionManager(sessionCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Handler{
 		BotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		BotName:  os.Getenv("TELEGRAM_BOT_NAME"),
 		Domain:   domain,
-		Session:  auth.NewSessionManager(isSecure),
-	}
+		Session:  sessionMgr,
+	}, nil
 }
 
 func (h *Handler) LoadTemplates(r *gin.Engine) error {
@@ -94,12 +106,20 @@ func (h *Handler) Index(c *gin.Context) {
 	}
 
 	// Fetch token
-	var token models.Token
-	storage.DB.Where("user_id = ?", user.ID).First(&token)
+	token, err := storage.GetUserToken(user.ID)
+	if err != nil {
+		log.Printf("Failed to fetch token for user %d: %v", user.ID, err)
+		c.String(http.StatusInternalServerError, "Failed to load user data")
+		return
+	}
 
 	// Fetch domains
-	var domains []models.Domain
-	storage.DB.Where("user_id = ?", user.ID).Find(&domains)
+	domains, err := storage.GetUserDomains(user.ID)
+	if err != nil {
+		log.Printf("Failed to fetch domains for user %d: %v", user.ID, err)
+		c.String(http.StatusInternalServerError, "Failed to load user data")
+		return
+	}
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"User":       user,
@@ -126,49 +146,54 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 	photoURL := data.Get("photo_url")
 
 	// Find or Create User
-	var user models.User
-	result := storage.DB.Where("telegram_id = ?", tgID).First(&user)
+	user, err := storage.GetUserByTelegramID(tgID)
 
-	if result.Error != nil {
-		// Create new user
-		user = models.User{
+	if err == storage.ErrNotFound {
+		// Create new user with token and domains in a single transaction
+		newUser := &models.User{
 			TelegramID: tgID,
 			FirstName:  firstName,
 			LastName:   lastName,
 			Username:   username,
 			PhotoURL:   photoURL,
 		}
-		storage.DB.Create(&user)
 
-		// Generate cryptographically secure token
-		tokenString, err := auth.GenerateSecureToken()
-		if err != nil {
-			log.Printf("Failed to generate token: %v", err)
-			c.String(http.StatusInternalServerError, "Failed to generate token")
-			return
-		}
-
-		token := models.Token{
-			TokenString: tokenString,
-			TokenHash:   auth.HashToken(tokenString),
-			UserID:      user.ID,
-		}
-		storage.DB.Create(&token)
-
-		// Generate 3 Random Domains
+		// Generate domain names
 		prefixes := []string{"misty", "silent", "bold", "rapid", "cool"}
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
+		var domains []string
 		for i := 0; i < 3; i++ {
 			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
-			storage.DB.Create(&models.Domain{Name: name, UserID: user.ID})
+			domains = append(domains, name)
 		}
+
+		reg := storage.UserRegistration{
+			User:    newUser,
+			Domains: domains,
+		}
+
+		createdUser, _, err := storage.CreateUserWithTokenAndDomains(reg)
+		if err != nil {
+			log.Printf("Failed to create user: %v", err)
+			c.String(http.StatusInternalServerError, "Failed to create user account")
+			return
+		}
+		user = createdUser
+	} else if err != nil {
+		log.Printf("Database error looking up user: %v", err)
+		c.String(http.StatusInternalServerError, "Database error")
+		return
 	} else {
-		// Update info
+		// Update existing user info
 		user.FirstName = firstName
 		user.LastName = lastName
 		user.Username = username
 		user.PhotoURL = photoURL
-		storage.DB.Save(&user)
+		if err := storage.UpdateUser(user); err != nil {
+			log.Printf("Failed to update user: %v", err)
+			c.String(http.StatusInternalServerError, "Failed to update user")
+			return
+		}
 	}
 
 	// Set secure signed session cookie
@@ -191,11 +216,7 @@ func (h *Handler) getUserFromSession(c *gin.Context) (*models.User, error) {
 		return nil, err
 	}
 
-	var user models.User
-	if err := storage.DB.First(&user, session.UserID).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
+	return storage.GetUserByID(session.UserID)
 }
 
 func (h *Handler) verifyTelegramHash(params map[string][]string) bool {
