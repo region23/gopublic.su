@@ -36,6 +36,10 @@ func main() {
 	domain := os.Getenv("DOMAIN_NAME")
 	email := os.Getenv("EMAIL")
 
+	if domain == "" {
+		storage.SeedData() // Seed data for local dev
+	}
+
 	var tlsConfig *tls.Config
 	var autocertManager *autocert.Manager
 

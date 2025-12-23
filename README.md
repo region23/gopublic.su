@@ -20,90 +20,76 @@ DOMAIN_NAME=tunnel.mysite.com
 EMAIL=admin@mysite.com
 ```
 
-## Local Development & Testing
+## Getting Started
 
-You can test the server locally using the included mock client.
+### 1. Server Setup (Docker)
 
-### Prerequisites
-- Go 1.22+
+1.  **Create `.env` file**:
+    ```ini
+    DOMAIN_NAME=tunnel.yourdomain.com
+    EMAIL=admin@yourdomain.com
+    TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+    TELEGRAM_BOT_NAME=YourBotName
+    ```
 
-### 1. Start the Server
-The server will default to listening on port `:4443` for control connections and `:8080` for HTTP ingress (to avoid permission issues on local machines).
+2.  **Run Server**:
+    ```bash
+    docker-compose up -d --build
+    ```
 
-```bash
-go run cmd/server/main.go
-```
-*Note: The first time you run this, it will create a `gopublic.db` SQLite database and seed it with a test user.*
+3.  **Access Dashboard**:
+    -   Open `https://app.tunnel.yourdomain.com`.
+    -   Log in with Telegram.
+    -   Copy your **Auth Token**.
 
-### 2. Run the Mock Client
-Open a new terminal and run the mock client. It connects to the local server, authenticates with the test token, and tunnels requests to a simulated local service.
+### 2. Client Setup
 
-```bash
-go run cmd/mock_client/main.go
-```
+1.  **Build Client**:
+    You need to build the client binary pointing to your server address.
+    ```bash
+    make build-client SERVER_ADDR=tunnel.yourdomain.com:4443
+    ```
+    *(For local dev use `SERVER_ADDR=localhost:4443`)*
 
-### 3. Test the Connection
-Use `curl` to send a request to the server's ingress port, specifying the hostname that the mock client registered (`misty-river`).
+2.  **Authenticate**:
+    ```bash
+    ./bin/gopublic-client auth <YOUR_TOKEN>
+    ```
+    This saves the token to `~/.gopublic`.
 
-```bash
-curl -v -H "Host: misty-river" http://localhost:8080/path
-```
+3.  **Start Tunnel**:
+    Expose a local port (e.g., 3000) to the internet:
+    ```bash
+    ./bin/gopublic-client start 3000
+    ```
+    
+    You will see your public URL (e.g., `https://misty-river.tunnel.yourdomain.com`).
 
-You should see: `Hello from Mock Client!`
-
----
-
-## Deployment on VPS (Docker)
-
-The recommended way to deploy the server is using Docker.
-
-### 1. Prerequisites
-- Docker and Docker Compose installed on your VPS.
-
-### 2. Deployment Steps
-
-1. **Clone/Copy Project**: Copy the project files to your VPS.
-2. **Create .env file**:
-   Create a `.env` file in the same directory:
-
-```ini
-DOMAIN_NAME=example.com
-EMAIL=your-email@example.com
-```
-
-3. **Build and Run**:
-
-```bash
-docker-compose up -d --build
-```
-
-This will:
-- Build the Go binary in a container.
-- Start the server container.
-- Bind port **4443** (Control Plane).
-- Bind host port **80** (HTTP Redirect) and **443** (HTTPS).
-- Persist data (users, active tunnels) and **SSL Certificates** in the `./data` directory.
-
-
-### 3. Verify
-Check logs to ensure it started correctly:
-```bash
-docker-compose logs -f
-```
-
-You should see:
-```
-Control Plane listening on :4443
-Public Ingress listening on :8080
-```
+4.  **Inspector**:
+    Open `http://localhost:4040` to view the local inspector UI.
 
 ---
 
-## Deployment on VPS (Manual Binary)
+## Local Development (No Docker)
 
-If you prefer running the binary directly:
+If you want to run the server locally without Docker/HTTPS:
 
-1. **Build**: `GOOS=linux GOARCH=amd64 go build -o server cmd/server/main.go`
-2. **Upload**: `scp server user@host:~`
-3. **Run**: `./server` (Use `systemd` for persistence).
+1.  **Run Server**:
+    ```bash
+    # Leave DOMAIN_NAME empty in .env or environment
+    go run cmd/server/main.go
+    ```
+    *Server listens on :8080 (HTTP Ingress) and :4443 (TCP Control).*
+
+2.  **Run Client**:
+    ```bash
+    make build-client SERVER_ADDR=localhost:4443
+    ./bin/gopublic-client auth sk_live_12345  # Default seed token
+    ./bin/gopublic-client start 8000
+    ```
+
+3.  **Test**:
+    ```bash
+    curl -H "Host: misty-river" http://localhost:8080/
+    ```
 

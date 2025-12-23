@@ -7,6 +7,7 @@ import (
 	"gopublic/pkg/protocol"
 	"log"
 	"net"
+	"os"
 
 	"github.com/hashicorp/yamux"
 )
@@ -93,13 +94,29 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	var boundDomains []string
-	for _, domain := range tunnelReq.RequestedDomains {
-		if storage.ValidateDomainOwnership(domain, user.ID) {
-			s.Registry.Register(domain, session)
-			boundDomains = append(boundDomains, domain)
-			log.Printf("Bound domain %s for user %s", domain, user.Email)
+	rootDomain := os.Getenv("DOMAIN_NAME")
+
+	// If no domains requested, bind ALL user domains
+	if len(tunnelReq.RequestedDomains) == 0 {
+		userDomains := storage.GetUserDomains(user.ID)
+		for _, d := range userDomains {
+			tunnelReq.RequestedDomains = append(tunnelReq.RequestedDomains, d.Name)
+		}
+	}
+
+	for _, name := range tunnelReq.RequestedDomains {
+		if storage.ValidateDomainOwnership(name, user.ID) {
+			// Register FQDN if rootDomain is set, otherwise just name (local dev)
+			regName := name
+			if rootDomain != "" {
+				regName = name + "." + rootDomain
+			}
+
+			s.Registry.Register(regName, session)
+			boundDomains = append(boundDomains, regName)
+			log.Printf("Bound domain %s for user %s", regName, user.Email)
 		} else {
-			log.Printf("Domain %s check failed for user %s", domain, user.Email)
+			log.Printf("Domain %s check failed for user %s", name, user.Email)
 		}
 	}
 

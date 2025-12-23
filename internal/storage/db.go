@@ -56,3 +56,9 @@ func ValidateDomainOwnership(domainName string, userID uint) bool {
 	result := DB.Where("name = ? AND user_id = ?", domainName, userID).First(&domain)
 	return result.Error == nil
 }
+
+func GetUserDomains(userID uint) []models.Domain {
+	var domains []models.Domain
+	DB.Where("user_id = ?", userID).Find(&domains)
+	return domains
+}

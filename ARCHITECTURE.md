@@ -1,61 +1,71 @@
-# Server Implementation Walkthrough
+# GoPublic Implementation Walkthrough
 
 ## Overview
-I have implemented the core Server component of `gopublic` with support for HTTPS, Automatic Routing, Client Builds, and **Telegram Authentication**.
+GoPublic is a self-hosted reverse proxy service.
+This walkthrough covers the **Server** (Control Plane, Ingress, Dashboard) and the **Client** (CLI, Tunnel).
 
-## Components Implemented
+## Server Components
 
-### 1. Dashboard & Authentication (`internal/dashboard`)
-- **UI**: Server-side rendered HTML using Go Templates (`templates/`).
-- **Auth**: Uses **Telegram Login Widget**.
-    - User authenticates via widget on `app.DOMAIN_NAME/login`.
-    - Server verifies the HMAC hash of the data received from Telegram using `TELEGRAM_BOT_TOKEN`.
-    - Creates/Updates user in SQLite database (`TelegramID`, `FirstName`, `PhotoURL`).
-    - Sets a `user_id` cookie (simple session).
-- **Features**:
-    - Shows the user's **Auth Token** (generated on first login).
-    - Lists assigned subdomains.
-    - Logout functionality.
+### 1. Dashboard & Authentication
+- **URL**: `app.DOMAIN_NAME`
+- **Auth**: Telegram Login Widget.
+- **Features**: Displays Auth Token and assigned domains.
+- **Implementation**: `internal/dashboard`
 
-### 2. Domain Routing (`internal/ingress`)
-The Ingress listener smartly routes traffic based on the `Host` header:
-- **`DOMAIN_NAME`** (e.g. `example.com`): Serves the **Landing Page**.
-- **`app.DOMAIN_NAME`** (e.g. `app.example.com`): Serves the **Dashboard** (routes `/`, `/login`, `/auth/telegram` delegated to Dashboard Handler).
-- **`*.DOMAIN_NAME`** (e.g. `foo.example.com`): Routes to the active **User Tunnel**.
+### 2. Public Ingress
+- **URL**: `*.DOMAIN_NAME`
+- **TLS**: Automatic Let's Encrypt certificates.
+- **Routing**: Routes subdomains to active Yamux sessions.
+- **Implementation**: `internal/ingress`
 
-### 3. Client Build System (`Makefile`)
-The client binary needs to know where the server is. Instead of config files, we bake the address in at build time.
-- **Variable**: `main.ServerAddr` in `cmd/client/main.go`.
-- **Injection**: The `Makefile` uses `go build -ldflags "-X main.ServerAddr=..."` to set this variable.
-- **Command**: `make build-client SERVER_ADDR=your-vps.com:4443`
+### 3. Control Plane
+- **Port**: `:4443`
+- **Protocol**: Secure TCP (TLS).
+- **Logic**: Handles Client Handshake, Auth, and Multiplexing.
+- **Implementation**: `internal/server`
 
-### 4. HTTPS
-- Integrated `autocert` for automatic Let's Encrypt certificates.
-- Supports On-Demand TLS for all subdomains.
+## Client Components
 
-## Usage
+### 1. CLI (`cmd/client`)
+- Built with `spf13/cobra`.
+- **Reference**:
+  - `gopublic auth <token>`: Saves token to `~/.gopublic`.
+  - `gopublic start <port>`: Starts tunneling `localhost:<port>`.
+
+### 2. Tunnel Logic (`internal/client/tunnel`)
+- Connects to Server via TLS.
+- Multiplexes connections with `yamux`.
+- Proxies requests to local port.
+
+### 3. Inspector (`internal/client/inspector`)
+- **Port**: `:4040`
+- **UI**: Embedded Web Interface to view tunnel status (and requests in future).
+
+## Deployment
 
 ### Server
-Deploy with Docker:
 1. Create `.env`:
-    ```ini
-    DOMAIN_NAME=example.com
-    EMAIL=admin@example.com
-    TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-    TELEGRAM_BOT_NAME=MyGopublicBot
-    ```
-2. Run:
-    ```bash
-    docker-compose up -d --build
-    ```
+   ```ini
+   DOMAIN_NAME=example.com
+   EMAIL=admin@example.com
+   TELEGRAM_BOT_TOKEN=...
+   TELEGRAM_BOT_NAME=...
+   ```
+2. Run with Docker:
+   ```bash
+   docker-compose up -d --build
+   ```
 
 ### Client
-Build the client for your server:
-```bash
-make build-client SERVER_ADDR=example.com:4443
-```
-Running the client:
-```bash
-./bin/gopublic-client
-```
-The client will connect (using token from dashboard), authenticates, and listen for requests.
+1. Build (replace SERVER_ADDR):
+   ```bash
+   make build-client SERVER_ADDR=example.com:4443
+   ```
+2. Authenticate:
+   ```bash
+   ./bin/gopublic-client auth sk_live_...
+   ```
+3. Start Tunnel:
+   ```bash
+   ./bin/gopublic-client start 3000
+   ```
