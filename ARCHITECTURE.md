@@ -39,7 +39,14 @@ This walkthrough covers the **Server** (Control Plane, Ingress, Dashboard) and t
 
 ### 3. Inspector (`internal/client/inspector`)
 - **Port**: `:4040`
-- **UI**: Embedded Web Interface to view tunnel status (and requests in future).
+- **UI**: Embedded Web Interface displaying real-time HTTP requests.
+- **Implementation**: Captures `http.Request` objects during proxying, stores them in an in-memory ring buffer (last 100), and serves them via an internal API.
+
+## Testing Locally (Dev Mode)
+To run the entire system on a local machine with 127.0.0.1:
+1. **Server**: Use `INSECURE_HTTP=true` and `DOMAIN_NAME=127.0.0.1` in `.env`. Run with `sudo` to bind port 80.
+2. **Client**: Connect to `localhost:4443`.
+3. **Login**: Use the Telegram widget at `http://127.0.0.1/login`. callback will be `http://127.0.0.1/auth/telegram`.
 
 ## Deployment
 

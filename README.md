@@ -20,6 +20,18 @@ DOMAIN_NAME=tunnel.mysite.com
 EMAIL=admin@mysite.com
 ```
 
+## VPS Deployment
+
+### 1. Prerequisites
+
+Before deploying to a VPS, ensure you have:
+- **Wildcard DNS**: Create a wildcard `A` record (e.g., `*.yourdomain.com`) and a root `A` record (`yourdomain.com`) pointing to your VPS IP.
+- **Open Ports**: Ensure your firewall (ufw, iptables, Cloud security groups) allows incoming traffic on:
+  - `80/tcp` (HTTP & ACME challenges)
+  - `443/tcp` (HTTPS Ingress)
+  - `4443/tcp` (Control Plane - Tunnel Connection)
+- **Telegram Bot**: Create a bot via [@BotFather](https://t.me/BotFather) and enable "Domain" for the login widget to match your `DOMAIN_NAME`.
+
 ## Getting Started
 
 ### 1. Server Setup (Docker)
@@ -32,10 +44,12 @@ EMAIL=admin@mysite.com
     TELEGRAM_BOT_NAME=YourBotName
     ```
 
-2.  **Run Server**:
-    ```bash
-    docker-compose up -d --build
-    ```
+```bash
+docker-compose up -d --build
+```
+
+> [!TIP]
+> Use `docker-compose logs -f` to check if Let's Encrypt certificates are being successfully issued.
 
 3.  **Access Dashboard**:
     -   Open `https://app.tunnel.yourdomain.com`.
@@ -92,4 +106,25 @@ If you want to run the server locally without Docker/HTTPS:
     ```bash
     curl -H "Host: misty-river" http://localhost:8080/
     ```
+
+### Testing Dashboard Locally
+
+To test the **Dashboard** and **Auth** locally:
+
+1.  **Configure `.env`**:
+    ```ini
+    DOMAIN_NAME=localhost
+    INSECURE_HTTP=true
+    TELEGRAM_BOT_TOKEN=...
+    TELEGRAM_BOT_NAME=...
+    ```
+
+2.  **Run Server**:
+    ```bash
+    go run cmd/server/main.go
+    ```
+
+3.  **Access**:
+    Open `http://app.localhost:8080` in your browser.
+    *(Note: Chrome/Firefox usually resolve `*.localhost` to `127.0.0.1` automatically. If not, add `127.0.0.1 app.localhost` to your `/etc/hosts`.)*
 

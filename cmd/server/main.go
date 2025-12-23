@@ -19,6 +19,7 @@ import (
 func main() {
 	// Load .env file if it exists
 	_ = godotenv.Load()
+	insecureMode := os.Getenv("INSECURE_HTTP") == "true"
 
 	// 1. Initialize Database
 	// It will create the file in the current working directory.
@@ -36,14 +37,14 @@ func main() {
 	domain := os.Getenv("DOMAIN_NAME")
 	email := os.Getenv("EMAIL")
 
-	if domain == "" {
+	if domain == "" || insecureMode {
 		storage.SeedData() // Seed data for local dev
 	}
 
 	var tlsConfig *tls.Config
 	var autocertManager *autocert.Manager
 
-	if domain != "" {
+	if domain != "" && !insecureMode {
 		log.Printf("Configuring HTTPS/TLS for domain: %s", domain)
 		cacheDir := "certs"
 		if err := os.MkdirAll(cacheDir, 0700); err != nil {
@@ -60,7 +61,7 @@ func main() {
 	}
 
 	// 5. Start Control Plane (TCP :4443)
-	// Pass TLS config if available
+	// Pass TLS config ONLY if we are in production (non-insecure) mode
 	controlPlane := server.NewServer(":4443", registry, tlsConfig)
 	go func() {
 		if err := controlPlane.Start(); err != nil {
@@ -69,9 +70,18 @@ func main() {
 	}()
 
 	// 6. Start Public Ingress
-	ingress := ingress.NewIngress(":8080", registry, dashHandler)
+	var ingressPort string
+	if insecureMode {
+		ingressPort = ":80"
+	} else {
+		ingressPort = ":8080"
+	}
+	ingress := ingress.NewIngress(ingressPort, registry, dashHandler)
 
-	if domain != "" {
+	// Enable HTTPS only if domain is set AND not explicitly disabled
+	useTLS := domain != "" && !insecureMode
+
+	if useTLS {
 		// --- HTTPS Mode (Production) ---
 		// TLS Ingress (443)
 		httpsServer := &http.Server{
@@ -97,7 +107,12 @@ func main() {
 
 	} else {
 		// --- HTTP Mode (Local/Dev) ---
-		log.Println("DOMAIN_NAME not set. Starting in HTTP-only mode (Local Dev).")
+		if domain != "" {
+			log.Printf("Starting in INSECURE HTTP mode for domain: %s. Listening on %s", domain, ingressPort)
+		} else {
+			log.Printf("DOMAIN_NAME not set. Starting in HTTP-only mode (Local Dev). Listening on %s", ingressPort)
+		}
+
 		go func() {
 			if err := ingress.Start(); err != nil {
 				log.Fatalf("Ingress failed: %v", err)

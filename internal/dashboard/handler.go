@@ -68,7 +68,13 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	authURL := fmt.Sprintf("https://app.%s/auth/telegram", h.Domain)
+	var authURL string
+	if h.Domain == "localhost" || h.Domain == "127.0.0.1" {
+		authURL = fmt.Sprintf("http://%s/auth/telegram", h.Domain)
+	} else {
+		authURL = fmt.Sprintf("https://app.%s/auth/telegram", h.Domain)
+	}
+
 	c.HTML(http.StatusOK, "login.html", gin.H{
 		"BotName": h.BotName,
 		"AuthURL": authURL,

@@ -9,7 +9,7 @@ services:
       - .env
     ports:
       - "4443:4443" # Control Plane
-      - "80:8080" # Public Ingress (Map host 80 to container 8080)
+      - "80:80" # HTTP Ingress & ACME Redirection
       - "443:443" # HTTPS Ingress
     volumes:
       - ./data:/app/data # Persist SQLite DB

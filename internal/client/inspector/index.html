@@ -1,19 +1,151 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoPublic Inspector</title>
     <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --border: #334155;
+        }
+
         body {
-            font-family: sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
             padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+            color: var(--accent);
+        }
+
+        .badge {
+            background: var(--accent);
+            color: var(--bg);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .request-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .request-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 8px;
+            display: grid;
+            grid-template-columns: 80px 100px 1fr 100px;
+            align-items: center;
+            transition: transform 0.1s;
+        }
+
+        .request-item:hover {
+            border-color: var(--accent);
+        }
+
+        .method {
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .path {
+            font-family: monospace;
+            color: #94a3b8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .status {
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .status.ok {
+            color: #4ade80;
+        }
+
+        .time {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 50px;
+            color: #64748b;
         }
     </style>
 </head>
 
 <body>
-    <h1>Inspector</h1>
-    <p>Incoming requests will appear here (Coming Soon).</p>
+    <div class="container">
+        <header>
+            <h1>GoPublic Inspector</h1>
+            <div id="connection-status" class="badge">Live</div>
+        </header>
+
+        <div id="requests" class="request-list">
+            <div class="empty">Waiting for requests...</div>
+        </div>
+    </div>
+
+    <script>
+        const requestList = document.getElementById('requests');
+        let lastId = 0;
+
+        async function fetchRequests() {
+            try {
+                const res = await fetch('/api/requests');
+                const data = await res.json();
+
+                if (data.length === 0) return;
+
+                requestList.innerHTML = data.map(req => `
+                    <div class="request-item">
+                        <div class="method">${req.method}</div>
+                        <div class="time">${new Date(req.timestamp).toLocaleTimeString()}</div>
+                        <div class="path">${req.path}</div>
+                        <div class="status ok">200 OK</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error("Fetch failed", e);
+            }
+        }
+
+        setInterval(fetchRequests, 1000);
+        fetchRequests();
+    </script>
 </body>
 
 </html>

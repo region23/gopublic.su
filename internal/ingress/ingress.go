@@ -107,36 +107,22 @@ func (i *Ingress) handleRequest(c *gin.Context) {
 
 	rootDomain := os.Getenv("DOMAIN_NAME")
 
-	// 1. Landing Page
-	if rootDomain != "" && host == rootDomain {
+	// DEBUG LOG
+	log.Printf("Ingress Debug: Host=%s, RootDomain=%s", host, rootDomain)
+
+	// 1. Determine Routes
+	isLocalDev := rootDomain == "127.0.0.1" || rootDomain == "localhost"
+	isDashboard := (rootDomain != "" && host == "app."+rootDomain) || (isLocalDev && host == rootDomain)
+
+	// 2. Landing Page (Only if NOT local dev and matches root)
+	if !isLocalDev && rootDomain != "" && host == rootDomain {
 		c.Header("Content-Type", "text/html")
 		c.String(http.StatusOK, "<h1>Welcome to GoPublic</h1><p>Fast, simple, secure tunnels.</p><a href='http://app."+rootDomain+"'>Go to Dashboard</a>")
 		return
 	}
 
-	// 2. Dashboard
-	// Handled by Registered Routes in i.DashHandler AND Middleware (to be added)
-	// OR: if we rely on route registration, we can't easily rely on NoRoute for tunnels without conflicts.
-	// FIX: Use a Host-based middleware for the entire engine.
-
-	// Temporarily: If DashHandler didn't register routes, we'd do it here.
-	// But since we registered them, we need to ensure they DON'T match tunnel domains.
-	// The best way in Gin is `r.Group("/")` with middleware that checks `Host == app.domain`.
-	// If check fails, `c.Next()`? No, if route matches, it runs.
-	// If check fails, we want to fall through to NoRoute? Gin doesn't support "fall through to NoRoute" easily from a matched route.
-
-	// ALTERNATIVE: Don't register routes on the main engine.
-	// Instead, have `handleRequest` (NoRoute) delegate to `DashHandler` if host matches.
-	// This is SAFER and EASIER for this architecture (Tunnels are dynamic wildcard).
-
-	if rootDomain != "" && host == "app."+rootDomain {
-		// Delegate to Dashboard Engine/Handler
-		// We can Create a separate Gin engine for Dashboard or just pass Context to DashHandler's methods manuall??
-		// `DashHandler.RegisterRoutes` registers on an Engine.
-		// Let's go back and CHANGE `ingress.Handler` to NOT register routes globally, but use a side-engine or similar.
-		// OR: just match path manually here.
-
-		// "Manual Routing" inside this block:
+	// 3. Dashboard
+	if isDashboard {
 		if c.Request.URL.Path == "/login" {
 			i.DashHandler.Login(c)
 			return

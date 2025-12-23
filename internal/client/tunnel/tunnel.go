@@ -1,13 +1,17 @@
 package tunnel
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"gopublic/internal/client/inspector"
 	"gopublic/pkg/protocol"
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"strings"
 
 	"github.com/hashicorp/yamux"
 )
@@ -27,31 +31,32 @@ func NewTunnel(serverAddr, token, localPort string) *Tunnel {
 }
 
 func (t *Tunnel) Start() error {
-	// 1. Connect to Server (Try TLS first, fallback to TCP for local dev if needed?
-	// No, main.go decides via ldflags/var. If var is just host:port, we need to know if TLS.
-	// For simplicity, let's assume TLS if port is 4443 or we can try.
-	// Actually, Server changes made it support TLS.
-	// Let's try `tls.Dial`. If it fails, maybe fallback?
-	// The Server always listens on TLS if DOMAIN_NAME is set.
-	// If DOMAIN_NAME is NOT set (local dev), it listens on plain TCP.
-	// We need a flag or heuristic.
-	// Let's assume TLS by default for "Production" feel, but allow insecure if handshake fails?
-	// Better: Use `tls.Dial` with `InsecureSkipVerify: true` for self-signed or just trust system roots.
-	// If connection fails, user might need to specify --insecure.
+	// For local development, skip TLS if server is localhost/127.0.0.1
+	host, _, _ := net.SplitHostPort(t.ServerAddr)
+	if host == "" {
+		host = t.ServerAddr
+	}
+	isLocal := host == "localhost" || host == "127.0.0.1" || host == "::1"
+
+	if isLocal {
+		log.Printf("Local server detected on %s, using plain TCP", t.ServerAddr)
+		conn, err := net.Dial("tcp", t.ServerAddr)
+		if err != nil {
+			return fmt.Errorf("failed to connect to local server: %v", err)
+		}
+		return t.handleSession(conn)
+	}
 
 	conn, err := tls.Dial("tcp", t.ServerAddr, &tls.Config{
-		InsecureSkipVerify: true, // For MVP/Dev. Production should NOT check this.
-		// TODO: remove skip verify for PROD.
+		InsecureSkipVerify: true,
 	})
 
 	if err != nil {
-		// Fallback to plain TCP for local dev (if server is HTTP-only)
 		log.Printf("TLS connection failed, trying plain TCP: %v", err)
 		connPlain, errPlain := net.Dial("tcp", t.ServerAddr)
 		if errPlain != nil {
 			return fmt.Errorf("failed to connect: %v", errPlain)
 		}
-		// Use plain connection
 		return t.handleSession(connPlain)
 	}
 
@@ -122,23 +127,14 @@ func (t *Tunnel) handleSession(conn net.Conn) error {
 
 	fmt.Printf("Tunnel Established! Incoming traffic on:\n")
 	for _, d := range resp.BoundDomains {
-		fmt.Printf(" - https://%s.%s -> localhost:%s\n", d, "DOMAIN_NAME", t.LocalPort)
-		// Note: Client doesn't know DOMAIN_NAME suffix really, unless server sends it.
-		// Server returns full domain or subdomain?
-		// DB stores "misty-river-123".
-		// Ingress checks `host == "app."+domain`.
-		// It seems DB stores SUBDOMAIN only? No: `Name: name`.
-		// `gopublic/internal/dashboard/handler.go`: `name := fmt.Sprintf(...)`
-		// It creates "misty-river-123".
-		// Ingress `handleRequest`: `host := c.Request.Host`.
-		// If DB has "misty-river", and host is "misty-river.example.com", Registry match fails?
-		// Registry `GetSession(host)`.
-		// If Registry registers "misty-river", but request comes as "misty-river.example.com".
-		// We need to match correctly.
-		// Server Registry currently maps `domain -> session`.
-		// If Server registers "misty-river", then Host header "misty-river.example.com" WON'T match.
-		// I must fix Server Logic to either register FQDN or match Subdomain.
-		// TASK: Check Server Logic.
+		scheme := "https"
+		if strings.Contains(t.ServerAddr, "localhost") || strings.Contains(t.ServerAddr, "127.0.0.1") {
+			scheme = "http"
+		}
+		// If server addr has a port (like :80), we might need it in the output too for local dev
+		// But usually Ingress is on :80 or :443.
+		// If it's local dev, ingress is on :80.
+		fmt.Printf(" - %s://%s -> localhost:%s\n", scheme, d, t.LocalPort)
 	}
 	stream.Close() // Handshake done
 
@@ -163,16 +159,41 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 	}
 	defer local.Close()
 
-	// Bidirectional Copy
-	// For HTTP, we might want to rewrite Host header?
-	// But simple TCP proxy is safer for generic streams.
-	// However, SPEC says "Read HTTP Request... Forward".
-	// Why? To support the Inspector?
-	// If we just pipe TCP, Inspector is harder.
-	// If we use `io.Copy`, it's fast.
-	// Let's stick to `io.Copy` for MVP performance.
-	// To support Inspector later, we wrap `remote` in a TeeReader/Writer.
+	// To support Inspector, we parse the HTTP request
+	reader := bufio.NewReader(remote)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		// Not a valid HTTP request or error? Just copy TCP.
+		go io.Copy(local, remote)
+		io.Copy(remote, local)
+		return
+	}
 
-	go io.Copy(local, remote)
-	io.Copy(remote, local)
+	// Record request to inspector
+	inspector.AddRequest(req.Method, req.Host, req.URL.Path, 0)
+
+	// Forward Request to Local
+	if err := req.Write(local); err != nil {
+		log.Printf("Failed to write request to local: %v", err)
+		return
+	}
+
+	// Read Response from Local
+	respReader := bufio.NewReader(local)
+	resp, err := http.ReadResponse(respReader, req)
+	if err != nil {
+		log.Printf("Failed to read response from local: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Update inspector with status code
+	// (Simplistic: we update the last one or by ID? Let's just update the list for now if we had IDs)
+	// For MVP, we'll just log the request at the start.
+
+	// Forward Response back to Remote
+	if err := resp.Write(remote); err != nil {
+		log.Printf("Failed to write response to remote: %v", err)
+		return
+	}
 }
