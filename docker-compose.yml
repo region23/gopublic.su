@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  server:
+    build: .
+    container_name: gopublic-server
+    restart: always
+    ports:
+      - "4443:4443" # Control Plane
+      - "80:8080" # Public Ingress (Map host 80 to container 8080)
+      - "443:443" # HTTPS Ingress
+    volumes:
+      - ./data:/app/data # Persist SQLite DB
+    working_dir: /app/data # Run inside data dir so DB is created there
+    entrypoint: [ "/app/server" ] # Adjust entrypoint to point to binary in /app

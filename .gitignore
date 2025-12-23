@@ -1,0 +1,25 @@
+# Binaries
+bin/
+server
+client
+gopublic-server
+gopublic-client
+
+# Database
+*.db
+*.sqlite
+
+# Secrets & Config
+.env
+
+# Docker & Data
+data/
+certs/
+
+# Logs
+*.log
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/
