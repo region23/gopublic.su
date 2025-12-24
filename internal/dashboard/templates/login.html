@@ -4,20 +4,248 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - GoPublic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; }
-        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
-        h1 { margin-bottom: 1.5rem; }
+        :root {
+            --lumon-teal: #0d7377;
+            --lumon-teal-light: #14919b;
+            --lumon-mint: #a8dadc;
+            --lumon-mint-pale: #d4ecec;
+            --bg-cream: #f5f5dc;
+            --bg-paper: #faf9f6;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a5a;
+            --text-muted: #7a7a8a;
+            --border-light: #d1d5db;
+            --shadow-soft: 0 2px 8px rgba(13, 115, 119, 0.08);
+            --shadow-card: 0 8px 32px rgba(26, 26, 46, 0.08);
+            --font-primary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background-color: var(--bg-cream);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-primary);
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2.5rem;
+        }
+
+        /* Brand Section */
+        .brand {
+            text-align: center;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .brand-icon {
+            width: 12px;
+            height: 12px;
+            background: linear-gradient(135deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+
+        .brand-name {
+            font-size: 1.75rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+        }
+
+        .brand-tagline {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        /* Login Card */
+        .login-card {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            box-shadow: var(--shadow-card);
+            padding: 2.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 0 0 4px 0;
+        }
+
+        .card-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .card-title {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .card-divider::before,
+        .card-divider::after {
+            content: '';
+            width: 40px;
+            height: 1px;
+            background: var(--border-light);
+        }
+
+        .card-divider-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--lumon-mint);
+            border-radius: 50%;
+        }
+
+        /* Telegram Widget Container */
+        .auth-widget {
+            display: flex;
+            justify-content: center;
+            padding: 0.5rem 0;
+        }
+
+        .auth-widget iframe {
+            border-radius: 4px;
+        }
+
+        /* Footer */
+        .login-footer {
+            text-align: center;
+        }
+
+        .footer-text {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .footer-separator {
+            display: inline-block;
+            width: 16px;
+            height: 1px;
+            background: var(--border-light);
+            vertical-align: middle;
+            margin: 0 0.75rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            body {
+                padding: 1.5rem;
+            }
+
+            .login-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .brand-name {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Focus states */
+        :focus-visible {
+            outline: 2px solid var(--lumon-teal);
+            outline-offset: 2px;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Login to GoPublic</h1>
-        <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                data-telegram-login="{{.BotName}}" 
-                data-size="large" 
-                data-auth-url="{{.AuthURL}}" 
-                data-request-access="write"></script>
+    <div class="login-container">
+        <div class="brand">
+            <div class="brand-mark">
+                <div class="brand-icon"></div>
+                <h1 class="brand-name">GoPublic</h1>
+            </div>
+            <p class="brand-tagline">Secure Tunnel Services</p>
+        </div>
+
+        <div class="login-card">
+            <div class="card-header">
+                <h2 class="card-title">Authentication Required</h2>
+                <div class="card-divider">
+                    <div class="card-divider-dot"></div>
+                </div>
+            </div>
+
+            <div class="auth-widget">
+                <script async src="https://telegram.org/js/telegram-widget.js?22"
+                        data-telegram-login="{{.BotName}}"
+                        data-size="large"
+                        data-auth-url="{{.AuthURL}}"
+                        data-request-access="write"></script>
+            </div>
+        </div>
+
+        <footer class="login-footer">
+            <span class="footer-text">
+                Tunnel Service
+                <span class="footer-separator"></span>
+                v1.0
+            </span>
+        </footer>
     </div>
 </body>
 </html>

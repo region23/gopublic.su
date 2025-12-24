@@ -1,78 +1,484 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - GoPublic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background-color: #f4f4f9;
+        :root {
+            --lumon-teal: #0d7377;
+            --lumon-teal-light: #14919b;
+            --lumon-mint: #a8dadc;
+            --lumon-mint-pale: #d4ecec;
+            --bg-cream: #f5f5dc;
+            --bg-paper: #faf9f6;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a5a;
+            --text-muted: #7a7a8a;
+            --border-light: #d1d5db;
+            --shadow-soft: 0 2px 8px rgba(13, 115, 119, 0.08);
+            --shadow-card: 0 8px 32px rgba(26, 26, 46, 0.08);
+            --font-primary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
         }
 
-        .card {
-            background: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 2rem;
-        }
-
-        .token {
-            background: #eee;
-            padding: 0.5rem;
-            font-family: monospace;
-            border-radius: 4px;
-            display: inline-block;
-        }
-
-        .domain-list {
-            list-style: none;
+        * {
+            margin: 0;
             padding: 0;
+            box-sizing: border-box;
         }
 
-        .domain-list li {
-            background: #eef;
-            margin: 0.5rem 0;
-            padding: 1rem;
-            border-radius: 4px;
+        body {
+            font-family: var(--font-primary);
+            background-color: var(--bg-cream);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-light);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-inner {
+            max-width: 900px;
+            margin: 0 auto;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
 
-        .logout {
-            float: right;
-            color: red;
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-icon {
+            width: 10px;
+            height: 10px;
+            background: linear-gradient(135deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+
+        .header-title {
+            font-size: 1rem;
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+        }
+
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: var(--lumon-mint-pale);
+            border: 1px solid var(--lumon-mint);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--lumon-teal);
+            text-transform: uppercase;
+        }
+
+        .logout-link {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
             text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            transition: all 0.25s ease;
+        }
+
+        .logout-link:hover {
+            color: var(--lumon-teal);
+            border-color: var(--lumon-teal);
+        }
+
+        /* Main Content */
+        .main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            box-shadow: var(--shadow-card);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 0 0 4px 0;
+        }
+
+        .card-header {
+            padding: 1.5rem 1.5rem 0;
+        }
+
+        .card-label {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-label::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            background: var(--lumon-mint);
+            border-radius: 50%;
+        }
+
+        .card-body {
+            padding: 1.25rem 1.5rem 1.5rem;
+        }
+
+        /* Token Section */
+        .token-display {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .token-value {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 0.9375rem;
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            padding: 0.875rem 1rem;
+            border-radius: 4px;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .copy-btn {
+            font-family: var(--font-primary);
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: var(--lumon-teal);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.25rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background: var(--lumon-teal-light);
+        }
+
+        .copy-btn.copied {
+            background: #4a7c59;
+        }
+
+        .token-instructions {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .token-instructions code {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            background: var(--lumon-mint-pale);
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            color: var(--lumon-teal);
+        }
+
+        /* Domain List */
+        .domain-list {
+            list-style: none;
+        }
+
+        .domain-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .domain-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .domain-item:first-child {
+            padding-top: 0;
+        }
+
+        .domain-number {
+            width: 28px;
+            height: 28px;
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+
+        .domain-name {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 0.9375rem;
+            color: var(--text-primary);
+        }
+
+        .domain-link {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--lumon-teal);
+            border-radius: 4px;
+            transition: all 0.25s ease;
+        }
+
+        .domain-link:hover {
+            background: var(--lumon-teal);
+            color: white;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Footer */
+        .footer {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 2rem 2rem;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .header-inner {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .main {
+                padding: 1.5rem 1rem;
+            }
+
+            .card-body {
+                padding: 1rem;
+            }
+
+            .token-display {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .copy-btn {
+                width: 100%;
+            }
+
+            .domain-item {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .domain-name {
+                width: 100%;
+                order: 2;
+                padding-left: 44px;
+            }
+
+            .domain-link {
+                order: 3;
+                margin-left: 44px;
+            }
+        }
+
+        /* Reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Focus states */
+        :focus-visible {
+            outline: 2px solid var(--lumon-teal);
+            outline-offset: 2px;
         }
     </style>
 </head>
-
 <body>
-    <div class="card">
-        <a href="/logout" class="logout">Logout</a>
-        <h1>Welcome, {{.User.FirstName}}</h1>
+    <header class="header">
+        <div class="header-inner">
+            <div class="header-brand">
+                <div class="header-icon"></div>
+                <span class="header-title">GoPublic</span>
+            </div>
+            <div class="header-user">
+                <div class="user-badge">
+                    <div class="user-avatar">{{slice .User.FirstName 0 1}}</div>
+                    <span>{{.User.FirstName}}</span>
+                </div>
+                <a href="/logout" class="logout-link">Sign Out</a>
+            </div>
+        </div>
+    </header>
 
-        <h3>Your Auth Token</h3>
-        <div class="token">{{.Token}}</div>
-        <p><small>Run <code>./gopublic auth {{.Token}}</code> to configure your client.</small></p>
-    </div>
+    <main class="main">
+        <section class="card">
+            <div class="card-header">
+                <div class="card-label">Authentication Token</div>
+            </div>
+            <div class="card-body">
+                <div class="token-display">
+                    <div class="token-value" id="token">{{.Token}}</div>
+                    <button class="copy-btn" id="copy-btn" onclick="copyToken()">Copy</button>
+                </div>
+                <p class="token-instructions">
+                    Configure your client: <code>./gopublic auth YOUR_TOKEN</code>
+                </p>
+            </div>
+        </section>
 
-    <div class="card">
-        <h3>Your Domains</h3>
-        <ul class="domain-list">
-            {{range .Domains}}
-            <li>
-                <strong>{{.Name}}</strong>
-                <span><a href="https://{{.Name}}.{{$.RootDomain}}" target="_blank">Open</a></span>
-            </li>
-            {{end}}
-        </ul>
-    </div>
+        <section class="card">
+            <div class="card-header">
+                <div class="card-label">Assigned Domains</div>
+            </div>
+            <div class="card-body">
+                {{if .Domains}}
+                <ul class="domain-list">
+                    {{range $i, $d := .Domains}}
+                    <li class="domain-item">
+                        <span class="domain-number">{{$i}}</span>
+                        <span class="domain-name">{{$d.Name}}.{{$.RootDomain}}</span>
+                        <a href="https://{{$d.Name}}.{{$.RootDomain}}" class="domain-link" target="_blank">Open</a>
+                    </li>
+                    {{end}}
+                </ul>
+                {{else}}
+                <div class="empty-state">No domains assigned yet</div>
+                {{end}}
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span class="footer-text">GoPublic Tunnel Service</span>
+    </footer>
+
+    <script>
+        function copyToken() {
+            const token = document.getElementById('token').textContent;
+            const btn = document.getElementById('copy-btn');
+
+            navigator.clipboard.writeText(token).then(() => {
+                btn.textContent = 'Copied';
+                btn.classList.add('copied');
+
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = token;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+
+                btn.textContent = 'Copied';
+                btn.classList.add('copied');
+
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
 </body>
-
 </html>
