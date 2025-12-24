@@ -10,6 +10,7 @@ For a deep dive into how the system works, see [ARCHITECTURE.md](ARCHITECTURE.md
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DOMAIN_NAME` | The root domain for your server (e.g. `example.com`). If set, enables **HTTPS** mode. | *empty* (HTTP mode) |
+| `PROJECT_NAME` | Project name displayed on the landing page and branding. | `Go Public` |
 | `EMAIL` | Email address for Let's Encrypt registration (required if `DOMAIN_NAME` is set). | *empty* |
 | `TELEGRAM_BOT_TOKEN` | Token from @BotFather for Telegram Login. | *empty* |
 | `TELEGRAM_BOT_NAME` | Username of your bot (e.g. `MyGopublicBot`) used in the login widget. | *empty* |
@@ -17,6 +18,7 @@ For a deep dive into how the system works, see [ARCHITECTURE.md](ARCHITECTURE.md
 **Example `.env` file:**
 ```ini
 DOMAIN_NAME=tunnel.mysite.com
+PROJECT_NAME=My Tunnel
 EMAIL=admin@mysite.com
 ```
 

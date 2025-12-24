@@ -87,6 +87,7 @@ open http://localhost:4040
 | Variable | Purpose |
 |----------|---------|
 | `DOMAIN_NAME` | Root domain (enables HTTPS if set) |
+| `PROJECT_NAME` | Branding name for landing page (default: "Go Public") |
 | `EMAIL` | For Let's Encrypt registration (required if DOMAIN_NAME set) |
 | `INSECURE_HTTP` | Set `true` for local dev without TLS |
 | `TELEGRAM_BOT_TOKEN` | For OAuth |
