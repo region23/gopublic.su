@@ -588,11 +588,39 @@
             text-align: center;
         }
 
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+
         .footer-text {
             font-family: var(--font-mono);
             font-size: 0.6875rem;
             letter-spacing: 0.05em;
             color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .footer-separator {
+            width: 20px;
+            height: 1px;
+            background: var(--border-light);
+        }
+
+        .footer-link {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--lumon-teal);
         }
 
         /* Responsive */
@@ -831,7 +859,15 @@ tunnels:
     </main>
 
     <footer class="footer">
-        <span class="footer-text">GoPublic Tunnel Protocol</span>
+        <div class="footer-content">
+            <span class="footer-text">GoPublic</span>
+            <span class="footer-separator"></span>
+            {{if .GitHubRepo}}
+            <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
+            {{else}}
+            <span class="footer-text">{{.Version}}</span>
+            {{end}}
+        </div>
     </footer>
 
     <script>

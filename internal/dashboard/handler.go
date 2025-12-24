@@ -20,6 +20,7 @@ import (
 	"gopublic/internal/config"
 	"gopublic/internal/models"
 	"gopublic/internal/storage"
+	"gopublic/internal/version"
 )
 
 //go:embed templates/*
@@ -123,8 +124,10 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "login.html", gin.H{
-		"BotName": h.BotName,
-		"AuthURL": authURL,
+		"BotName":    h.BotName,
+		"AuthURL":    authURL,
+		"GitHubRepo": h.GitHubRepo,
+		"Version":    version.Version,
 	})
 }
 
@@ -157,6 +160,7 @@ func (h *Handler) Index(c *gin.Context) {
 		"Domains":    domains,
 		"RootDomain": h.Domain,
 		"GitHubRepo": h.GitHubRepo,
+		"Version":    version.Version,
 	})
 }
 

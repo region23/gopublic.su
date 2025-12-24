@@ -164,6 +164,10 @@
         /* Footer */
         .login-footer {
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
         }
 
         .footer-text {
@@ -171,15 +175,27 @@
             font-size: 0.6875rem;
             letter-spacing: 0.05em;
             color: var(--text-muted);
+            text-transform: uppercase;
         }
 
         .footer-separator {
-            display: inline-block;
-            width: 16px;
+            width: 20px;
             height: 1px;
             background: var(--border-light);
-            vertical-align: middle;
-            margin: 0 0.75rem;
+        }
+
+        .footer-link {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--lumon-teal);
         }
 
         /* Responsive */
@@ -240,11 +256,13 @@
         </div>
 
         <footer class="login-footer">
-            <span class="footer-text">
-                Tunnel Protocol
-                <span class="footer-separator"></span>
-                v1.0
-            </span>
+            <span class="footer-text">GoPublic</span>
+            <span class="footer-separator"></span>
+            {{if .GitHubRepo}}
+            <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
+            {{else}}
+            <span class="footer-text">{{.Version}}</span>
+            {{end}}
         </footer>
     </div>
 </body>
