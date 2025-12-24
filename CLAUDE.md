@@ -92,6 +92,7 @@ open http://localhost:4040
 | `INSECURE_HTTP` | Set `true` for local dev without TLS |
 | `TELEGRAM_BOT_TOKEN` | For OAuth |
 | `TELEGRAM_BOT_NAME` | Bot username for login widget |
+| `GITHUB_REPO` | GitHub repo for client downloads (e.g., "username/gopublic") |
 | `SESSION_HASH_KEY` | 32-byte hex for cookie signing (optional) |
 | `SESSION_BLOCK_KEY` | 32-byte hex for cookie encryption (optional) |
 

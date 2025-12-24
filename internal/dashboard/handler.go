@@ -26,10 +26,11 @@ import (
 var templateFS embed.FS
 
 type Handler struct {
-	BotToken string
-	BotName  string
-	Domain   string
-	Session  *auth.SessionManager
+	BotToken   string
+	BotName    string
+	Domain     string
+	GitHubRepo string
+	Session    *auth.SessionManager
 }
 
 // NewHandlerWithConfig creates a new dashboard handler with the given configuration.
@@ -45,10 +46,11 @@ func NewHandlerWithConfig(cfg *config.Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		BotToken: cfg.TelegramBotToken,
-		BotName:  cfg.TelegramBotName,
-		Domain:   cfg.Domain,
-		Session:  sessionMgr,
+		BotToken:   cfg.TelegramBotToken,
+		BotName:    cfg.TelegramBotName,
+		Domain:     cfg.Domain,
+		GitHubRepo: cfg.GitHubRepo,
+		Session:    sessionMgr,
 	}, nil
 }
 
@@ -147,6 +149,7 @@ func (h *Handler) Index(c *gin.Context) {
 		"Token":      token.TokenString,
 		"Domains":    domains,
 		"RootDomain": h.Domain,
+		"GitHubRepo": h.GitHubRepo,
 	})
 }
 

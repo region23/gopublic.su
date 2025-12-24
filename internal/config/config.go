@@ -24,6 +24,9 @@ type Config struct {
 	TelegramBotToken string
 	TelegramBotName  string
 
+	// GitHub repository for client downloads (e.g., "username/gopublic")
+	GitHubRepo string
+
 	// Session keys (32 bytes each)
 	SessionHashKey  []byte
 	SessionBlockKey []byte
@@ -48,6 +51,7 @@ func LoadFromEnv() (*Config, error) {
 		MaxConnections:   1000,
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramBotName:  os.Getenv("TELEGRAM_BOT_NAME"),
+		GitHubRepo:       os.Getenv("GITHUB_REPO"),
 	}
 
 	// Parse session keys

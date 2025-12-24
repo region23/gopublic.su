@@ -351,6 +351,60 @@
             color: var(--lumon-teal);
         }
 
+        /* Download Section */
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .download-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.25s ease;
+        }
+
+        .download-btn:hover {
+            border-color: var(--lumon-teal);
+            background: var(--lumon-mint-pale);
+        }
+
+        .download-icon {
+            font-size: 1.5rem;
+        }
+
+        .download-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .download-note {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .download-note code {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            background: var(--lumon-mint-pale);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            color: var(--lumon-teal);
+        }
+
         /* Footer */
         .footer {
             max-width: 900px;
@@ -458,6 +512,35 @@
                 </p>
             </div>
         </section>
+
+        {{if .GitHubRepo}}
+        <section class="card">
+            <div class="card-header">
+                <div class="card-label">Скачать клиент</div>
+            </div>
+            <div class="card-body">
+                <div class="download-grid">
+                    <a href="https://github.com/{{.GitHubRepo}}/releases/latest/download/gopublic-macos-arm64" class="download-btn">
+                        <span class="download-icon">🍎</span>
+                        <span class="download-label">macOS ARM</span>
+                    </a>
+                    <a href="https://github.com/{{.GitHubRepo}}/releases/latest/download/gopublic-macos-amd64" class="download-btn">
+                        <span class="download-icon">🍎</span>
+                        <span class="download-label">macOS Intel</span>
+                    </a>
+                    <a href="https://github.com/{{.GitHubRepo}}/releases/latest/download/gopublic-linux-amd64" class="download-btn">
+                        <span class="download-icon">🐧</span>
+                        <span class="download-label">Linux x64</span>
+                    </a>
+                    <a href="https://github.com/{{.GitHubRepo}}/releases/latest/download/gopublic-windows-amd64.exe" class="download-btn">
+                        <span class="download-icon">🪟</span>
+                        <span class="download-label">Windows x64</span>
+                    </a>
+                </div>
+                <p class="download-note">После скачивания: <code>chmod +x gopublic-*</code> (для macOS/Linux)</p>
+            </div>
+        </section>
+        {{end}}
 
         <section class="card">
             <div class="card-header">

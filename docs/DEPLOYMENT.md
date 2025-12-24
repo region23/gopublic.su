@@ -144,6 +144,9 @@ TELEGRAM_BOT_NAME=YourBotName
 # Название проекта (отображается на landing page)
 PROJECT_NAME=GoPublic
 
+# GitHub репозиторий для ссылок на скачивание клиента
+GITHUB_REPO=your-username/gopublic
+
 # Опционально: ключи для cookies (генерируются автоматически если не заданы)
 # SESSION_HASH_KEY=your-32-byte-hex-key
 # SESSION_BLOCK_KEY=your-32-byte-hex-key
