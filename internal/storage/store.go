@@ -16,6 +16,7 @@ type Store interface {
 	ValidateToken(tokenStr string) (*models.User, error)
 	GetUserToken(userID uint) (*models.Token, error)
 	CreateToken(token *models.Token) error
+	RegenerateToken(userID uint) (string, error)
 
 	// Domain operations
 	GetUserDomains(userID uint) ([]models.Domain, error)

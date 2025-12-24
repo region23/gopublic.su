@@ -139,6 +139,40 @@ func (s *SQLiteStore) CreateToken(token *models.Token) error {
 	return s.db.Create(token).Error
 }
 
+// RegenerateToken creates a new token for the user, replacing the old one.
+// Returns the new token string (shown only once to user).
+func (s *SQLiteStore) RegenerateToken(userID uint) (string, error) {
+	var tokenString string
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Delete existing token
+		if err := tx.Where("user_id = ?", userID).Delete(&models.Token{}).Error; err != nil {
+			return err
+		}
+
+		// Generate new token
+		var err error
+		tokenString, err = auth.GenerateSecureToken()
+		if err != nil {
+			return err
+		}
+
+		// Create new token
+		token := models.Token{
+			TokenString: tokenString,
+			TokenHash:   auth.HashToken(tokenString),
+			UserID:      userID,
+		}
+		return tx.Create(&token).Error
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
 // --- Domain Operations ---
 
 func (s *SQLiteStore) GetUserDomains(userID uint) ([]models.Domain, error) {
@@ -337,4 +371,13 @@ func GetUserByID(id uint) (*models.User, error) {
 		return nil, ErrDBError
 	}
 	return (&SQLiteStore{db: DB}).GetUserByID(id)
+}
+
+// RegenerateToken regenerates a user's token using the global DB.
+// Deprecated: Use SQLiteStore.RegenerateToken instead.
+func RegenerateToken(userID uint) (string, error) {
+	if DB == nil {
+		return "", ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).RegenerateToken(userID)
 }

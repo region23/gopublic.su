@@ -321,6 +321,12 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 		i.DashHandler.TelegramCallback(c)
 	case "/logout":
 		i.DashHandler.Logout(c)
+	case "/api/regenerate-token":
+		if c.Request.Method == http.MethodPost {
+			i.DashHandler.RegenerateToken(c)
+		} else {
+			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
+		}
 	default:
 		c.String(http.StatusNotFound, "Not Found")
 	}

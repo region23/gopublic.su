@@ -241,6 +241,41 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, "/login")
 }
 
+// RegenerateToken handles POST /api/regenerate-token - creates a new token for the user
+func (h *Handler) RegenerateToken(c *gin.Context) {
+	// Validate CSRF token (double-submit cookie pattern)
+	cookieToken, err := c.Cookie("csrf_token")
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token missing"})
+		return
+	}
+
+	requestToken := c.GetHeader("X-CSRF-Token")
+	if requestToken == "" || requestToken != cookieToken {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token invalid"})
+		return
+	}
+
+	// Validate session
+	user, err := h.getUserFromSession(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	newToken, err := storage.RegenerateToken(user.ID)
+	if err != nil {
+		log.Printf("Failed to regenerate token for user %d: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to regenerate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":   newToken,
+		"command": fmt.Sprintf("gopublic auth %s", newToken),
+	})
+}
+
 func (h *Handler) getUserFromSession(c *gin.Context) (*models.User, error) {
 	session, err := h.Session.GetSession(c.Request)
 	if err != nil {
