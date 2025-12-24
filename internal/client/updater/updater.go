@@ -269,11 +269,19 @@ func parseChecksum(data []byte, filename string) (string, error) {
 
 // installUnix performs atomic replacement on Unix systems
 func installUnix(execPath string, data []byte) (*UpdateResult, error) {
-	// Write to temp file in same directory (for atomic rename)
+	// Try to create temp file in same directory first (for atomic rename)
+	// Fall back to system temp dir if permission denied
 	dir := filepath.Dir(execPath)
 	tmpFile, err := os.CreateTemp(dir, "gopublic-update-*")
+	useSystemTemp := false
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
+		// Permission denied - use system temp directory
+		tmpFile, err = os.CreateTemp("", "gopublic-update-*")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp file: %w", err)
+		}
+		useSystemTemp = true
 	}
 	tmpPath := tmpFile.Name()
 
@@ -290,10 +298,21 @@ func installUnix(execPath string, data []byte) (*UpdateResult, error) {
 		return nil, fmt.Errorf("failed to set permissions: %w", err)
 	}
 
-	// Atomic rename
+	// Try atomic rename first
 	if err := os.Rename(tmpPath, execPath); err != nil {
-		os.Remove(tmpPath)
-		return nil, fmt.Errorf("failed to install update: %w", err)
+		// Rename failed (cross-device or permission denied)
+		// Try copy + remove approach
+		if useSystemTemp {
+			// Copy to destination
+			if err := copyFile(tmpPath, execPath); err != nil {
+				os.Remove(tmpPath)
+				return nil, fmt.Errorf("failed to install update: %w", err)
+			}
+			os.Remove(tmpPath)
+		} else {
+			os.Remove(tmpPath)
+			return nil, fmt.Errorf("failed to install update: %w", err)
+		}
 	}
 
 	return &UpdateResult{
@@ -301,6 +320,28 @@ func installUnix(execPath string, data []byte) (*UpdateResult, error) {
 		Message:      "Update installed successfully. Restart to apply.",
 		NeedsRestart: true,
 	}, nil
+}
+
+// copyFile copies a file from src to dst, replacing dst if it exists
+func copyFile(src, dst string) error {
+	// Read source file
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source: %w", err)
+	}
+
+	// Get original file info for permissions
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source: %w", err)
+	}
+
+	// Write to destination
+	if err := os.WriteFile(dst, data, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to write destination: %w", err)
+	}
+
+	return nil
 }
 
 // installWindows handles Windows-specific update (can't replace running exe)
