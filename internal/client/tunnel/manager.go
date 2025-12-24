@@ -11,6 +11,7 @@ import (
 type TunnelManager struct {
 	ServerAddr string
 	Token      string
+	Force      bool // Force disconnect existing sessions
 	tunnels    []*ManagedTunnel
 	mu         sync.Mutex
 }
@@ -32,6 +33,11 @@ func NewTunnelManager(serverAddr, token string) *TunnelManager {
 	}
 }
 
+// SetForce sets the force flag to disconnect existing sessions
+func (tm *TunnelManager) SetForce(force bool) {
+	tm.Force = force
+}
+
 // AddTunnel adds a tunnel configuration to the manager
 func (tm *TunnelManager) AddTunnel(name, localPort, subdomain string) {
 	tm.mu.Lock()
@@ -39,6 +45,7 @@ func (tm *TunnelManager) AddTunnel(name, localPort, subdomain string) {
 
 	t := NewTunnel(tm.ServerAddr, tm.Token, localPort)
 	t.Subdomain = subdomain
+	t.Force = tm.Force
 
 	mt := &ManagedTunnel{
 		Name:      name,

@@ -67,6 +67,12 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 		err := t.Start()
 
 		if err != nil {
+			// Don't retry on "already connected" error - this is not transient
+			if IsAlreadyConnectedError(err) {
+				log.Printf("Session conflict: %v", err)
+				return err
+			}
+
 			log.Printf("Connection failed: %v", err)
 
 			// Exponential backoff

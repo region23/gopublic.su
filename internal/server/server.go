@@ -22,10 +22,11 @@ import (
 // Server manages the control plane for tunnel connections.
 // It handles client authentication, domain binding, and session management.
 type Server struct {
-	Registry   *TunnelRegistry
-	Port       string
-	TLSConfig  *tls.Config
-	RootDomain string // Root domain for FQDN generation
+	Registry     *TunnelRegistry
+	UserSessions *UserSessionRegistry // Tracks active sessions per user
+	Port         string
+	TLSConfig    *tls.Config
+	RootDomain   string // Root domain for FQDN generation
 
 	listener net.Listener
 	wg       sync.WaitGroup
@@ -42,6 +43,7 @@ func NewServerWithConfig(cfg *config.Config, registry *TunnelRegistry, tlsConfig
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		Registry:       registry,
+		UserSessions:   NewUserSessionRegistry(),
 		Port:           cfg.ControlPlanePort,
 		TLSConfig:      tlsConfig,
 		RootDomain:     cfg.Domain,
@@ -56,6 +58,7 @@ func NewServer(port string, registry *TunnelRegistry, tlsConfig *tls.Config) *Se
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		Registry:       registry,
+		UserSessions:   NewUserSessionRegistry(),
 		Port:           port,
 		TLSConfig:      tlsConfig,
 		RootDomain:     os.Getenv("DOMAIN_NAME"), // Fallback for backward compat
@@ -189,14 +192,34 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	// 2. Authenticate client
-	user, err := s.authenticate(stream, conn.RemoteAddr().String())
+	user, force, err := s.authenticate(stream, conn.RemoteAddr().String())
 	if err != nil {
 		log.Printf("Authentication failed for %s: %v", conn.RemoteAddr(), err)
 		session.Close()
 		return
 	}
 
-	// 3. Process tunnel request and bind domains
+	// 3. Check for existing session
+	if existingSession, exists := s.UserSessions.GetSession(user.ID); exists {
+		if !force {
+			// Reject connection - user already has active session
+			log.Printf("User %d already connected, rejecting new connection (use force=true to override)", user.ID)
+			s.sendErrorWithCode(stream, "You already have an active tunnel session. Use --force to disconnect the existing session.", protocol.ErrorCodeAlreadyConnected)
+			session.Close()
+			return
+		}
+
+		// Force mode: disconnect old session
+		log.Printf("Force disconnect: closing existing session for user %d", user.ID)
+		// Unregister old domains first
+		for _, domain := range existingSession.Domains {
+			s.Registry.Unregister(domain)
+		}
+		existingSession.Session.Close()
+		s.UserSessions.Unregister(user.ID)
+	}
+
+	// 4. Process tunnel request and bind domains
 	boundDomains, err := s.processTunnelRequest(stream, session, user, conn.RemoteAddr().String())
 	if err != nil {
 		log.Printf("Tunnel request failed for %s: %v", conn.RemoteAddr(), err)
@@ -204,13 +227,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// 4. Send success response
+	// 5. Register user session
+	s.UserSessions.Register(user.ID, session, boundDomains)
+
+	// 6. Send success response
 	if err := s.sendSuccessResponse(stream, boundDomains); err != nil {
 		log.Printf("Failed to send success response to %s: %v", conn.RemoteAddr(), err)
 	}
 	log.Printf("Handshake complete for %s. Bound domains: %v", conn.RemoteAddr(), boundDomains)
 
-	// 5. Monitor session for cleanup
+	// 7. Monitor session for cleanup
 	s.monitorSession(session, user.ID, boundDomains)
 }
 
@@ -233,24 +259,24 @@ func (s *Server) setupYamuxSession(conn net.Conn) (*yamux.Session, net.Conn, err
 	return session, stream, nil
 }
 
-// authenticate validates the client's token and returns the user.
-func (s *Server) authenticate(stream net.Conn, remoteAddr string) (*models.User, error) {
+// authenticate validates the client's token and returns the user and force flag.
+func (s *Server) authenticate(stream net.Conn, remoteAddr string) (*models.User, bool, error) {
 	decoder := json.NewDecoder(stream)
 
 	var authReq protocol.AuthRequest
 	if err := decoder.Decode(&authReq); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	log.Printf("Auth request received from %s", remoteAddr)
+	log.Printf("Auth request received from %s (force=%v)", remoteAddr, authReq.Force)
 
 	user, err := storage.ValidateToken(authReq.Token)
 	if err != nil {
-		s.sendError(stream, "Invalid Token")
-		return nil, err
+		s.sendErrorWithCode(stream, "Invalid Token", protocol.ErrorCodeInvalidToken)
+		return nil, false, err
 	}
 	log.Printf("User %s authenticated (ID: %d)", user.Username, user.ID)
 
-	return user, nil
+	return user, authReq.Force, nil
 }
 
 // processTunnelRequest handles the tunnel request and binds domains.
@@ -337,6 +363,7 @@ func (s *Server) monitorSession(session *yamux.Session, userID uint, boundDomain
 		for _, d := range boundDomains {
 			s.Registry.Unregister(d)
 		}
+		s.UserSessions.Unregister(userID)
 	}()
 }
 
@@ -344,6 +371,15 @@ func (s *Server) sendError(stream net.Conn, msg string) {
 	resp := protocol.InitResponse{
 		Success: false,
 		Error:   msg,
+	}
+	json.NewEncoder(stream).Encode(resp)
+}
+
+func (s *Server) sendErrorWithCode(stream net.Conn, msg string, code protocol.ErrorCode) {
+	resp := protocol.InitResponse{
+		Success:   false,
+		Error:     msg,
+		ErrorCode: code,
 	}
 	json.NewEncoder(stream).Encode(resp)
 }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -81,6 +82,7 @@ func init() {
 	startCmd.Flags().BoolP("all", "a", false, "Start all tunnels from gopublic.yaml")
 	startCmd.Flags().Bool("tui", true, "Enable terminal UI (default: true for interactive terminals)")
 	startCmd.Flags().Bool("no-tui", false, "Disable terminal UI")
+	startCmd.Flags().BoolP("force", "f", false, "Force connect, replacing any existing session")
 }
 
 func runStart(cmd *cobra.Command, args []string) {
@@ -94,6 +96,31 @@ func runStart(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, "No token found. Run 'gopublic auth <token>' first.")
 		os.Exit(1)
 	}
+
+	// Get force flag
+	forceFlag, _ := cmd.Flags().GetBool("force")
+
+	// Check local lock file
+	if err := config.AcquireLock(); err != nil {
+		if errors.Is(err, config.ErrAlreadyRunning) {
+			if forceFlag {
+				fmt.Println("Force mode: removing stale lock file...")
+				config.ForceReleaseLock()
+				if err := config.AcquireLock(); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to acquire lock: %v\n", err)
+					os.Exit(1)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				fmt.Fprintln(os.Stderr, "Use --force to override.")
+				os.Exit(1)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to acquire lock: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	defer config.ReleaseLock()
 
 	// Determine if we should use TUI
 	useTUI := shouldUseTUI(cmd)
@@ -126,11 +153,11 @@ func runStart(cmd *cobra.Command, args []string) {
 
 	if projectErr == nil && (allFlag || len(args) == 0) {
 		// Multi-tunnel mode from gopublic.yaml
-		runMultiTunnel(ctx, cfg, projectCfg, eventBus, statsTracker, useTUI)
+		runMultiTunnel(ctx, cfg, projectCfg, eventBus, statsTracker, useTUI, forceFlag)
 	} else if len(args) == 1 {
 		// Single tunnel mode
 		port := args[0]
-		runSingleTunnel(ctx, cfg, port, eventBus, statsTracker, useTUI)
+		runSingleTunnel(ctx, cfg, port, eventBus, statsTracker, useTUI, forceFlag)
 	} else {
 		fmt.Fprintln(os.Stderr, "Either provide a port or create gopublic.yaml config file")
 		os.Exit(1)
@@ -161,7 +188,7 @@ func shouldUseTUI(cmd *cobra.Command) bool {
 	return true
 }
 
-func runSingleTunnel(ctx context.Context, cfg *config.Config, port string, eventBus *events.Bus, statsTracker *stats.Stats, useTUI bool) {
+func runSingleTunnel(ctx context.Context, cfg *config.Config, port string, eventBus *events.Bus, statsTracker *stats.Stats, useTUI bool, force bool) {
 	// Configure replay with local port
 	inspector.SetLocalPort(port)
 
@@ -169,6 +196,7 @@ func runSingleTunnel(ctx context.Context, cfg *config.Config, port string, event
 	t := tunnel.NewTunnel(ServerAddr, cfg.Token, port)
 	t.SetEventBus(eventBus)
 	t.SetStats(statsTracker)
+	t.SetForce(force)
 
 	if useTUI {
 		// Run with TUI
@@ -189,8 +217,9 @@ func runSingleTunnel(ctx context.Context, cfg *config.Config, port string, event
 	}
 }
 
-func runMultiTunnel(ctx context.Context, cfg *config.Config, projectCfg *config.ProjectConfig, eventBus *events.Bus, statsTracker *stats.Stats, useTUI bool) {
+func runMultiTunnel(ctx context.Context, cfg *config.Config, projectCfg *config.ProjectConfig, eventBus *events.Bus, statsTracker *stats.Stats, useTUI bool, force bool) {
 	manager := tunnel.NewTunnelManager(ServerAddr, cfg.Token)
+	manager.SetForce(force)
 
 	// Set first tunnel port for replay
 	for _, t := range projectCfg.Tunnels {

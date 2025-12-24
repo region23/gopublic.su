@@ -35,6 +35,7 @@ type Tunnel struct {
 	Token      string
 	LocalPort  string
 	Subdomain  string // Specific subdomain to bind (empty = bind all)
+	Force      bool   // Force disconnect existing session
 
 	// TLS configuration
 	TLSConfig *TLSConfig
@@ -77,6 +78,11 @@ func (t *Tunnel) SetStats(s *stats.Stats) {
 // SetTLSConfig sets the TLS configuration.
 func (t *Tunnel) SetTLSConfig(cfg *TLSConfig) {
 	t.TLSConfig = cfg
+}
+
+// SetForce sets the force flag to disconnect existing session.
+func (t *Tunnel) SetForce(force bool) {
+	t.Force = force
 }
 
 // BoundDomains returns the domains bound to this tunnel.
@@ -195,7 +201,7 @@ func (t *Tunnel) handleSession(conn net.Conn, connectStart time.Time) error {
 	}
 
 	// Auth
-	authReq := protocol.AuthRequest{Token: t.Token}
+	authReq := protocol.AuthRequest{Token: t.Token, Force: t.Force}
 	if err := json.NewEncoder(stream).Encode(authReq); err != nil {
 		return err
 	}
@@ -217,6 +223,10 @@ func (t *Tunnel) handleSession(conn net.Conn, connectStart time.Time) error {
 	}
 
 	if !resp.Success {
+		// Check for specific error code
+		if resp.ErrorCode == protocol.ErrorCodeAlreadyConnected {
+			return &AlreadyConnectedError{Message: resp.Error}
+		}
 		return fmt.Errorf("server error: %s", resp.Error)
 	}
 
