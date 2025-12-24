@@ -185,26 +185,6 @@
             padding: 1.25rem 1.5rem 1.5rem;
         }
 
-        /* Token Section */
-        .token-display {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .token-value {
-            flex: 1;
-            font-family: var(--font-mono);
-            font-size: 0.9375rem;
-            background: var(--bg-paper);
-            border: 1px solid var(--border-light);
-            padding: 0.875rem 1rem;
-            border-radius: 4px;
-            color: var(--text-primary);
-            word-break: break-all;
-        }
-
         .copy-btn {
             font-family: var(--font-primary);
             font-size: 0.75rem;
@@ -227,6 +207,120 @@
 
         .copy-btn.copied {
             background: #4a7c59;
+        }
+
+        /* Code block with copy icon */
+        .code-block {
+            position: relative;
+        }
+
+        .code-block .config-example {
+            margin-bottom: 0;
+            padding-right: 2.5rem;
+        }
+
+        .copy-icon-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: transparent;
+            border: none;
+            padding: 0.4rem;
+            cursor: pointer;
+            opacity: 0.4;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .copy-icon-btn svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-muted);
+            transition: color 0.2s ease;
+        }
+
+        .copy-icon-btn:hover {
+            opacity: 1;
+            background: var(--lumon-mint-pale);
+        }
+
+        .copy-icon-btn:hover svg {
+            color: var(--lumon-teal);
+        }
+
+        .copy-icon-btn.copied {
+            opacity: 1;
+        }
+
+        .copy-icon-btn.copied svg {
+            color: #4a7c59;
+        }
+
+        .code-block:hover .copy-icon-btn {
+            opacity: 1;
+        }
+
+        /* Tooltip for copy button */
+        .copy-icon-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            margin-bottom: 0.25rem;
+            background: var(--text-primary);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.6875rem;
+            font-family: var(--font-primary);
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .copy-icon-btn.copied::after {
+            opacity: 1;
+        }
+
+        /* Token display with inline copy */
+        .token-display-inline {
+            display: flex;
+            align-items: stretch;
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .token-display-inline .token-value {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            padding: 0.875rem 1rem;
+            color: var(--text-primary);
+            word-break: break-all;
+            background: transparent;
+            border: none;
+        }
+
+        .token-display-inline .copy-icon-btn {
+            position: relative;
+            top: auto;
+            right: auto;
+            opacity: 0.6;
+            padding: 0.875rem;
+            border-radius: 0;
+            border-left: 1px solid var(--border-light);
+        }
+
+        .token-display-inline .copy-icon-btn:hover {
+            opacity: 1;
+            background: var(--lumon-mint-pale);
         }
 
         .token-instructions {
@@ -317,19 +411,13 @@
         .install-block {
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
 
         .install-title {
             font-size: 0.9rem;
             font-weight: 600;
             color: var(--text-primary);
-        }
-
-        .copy-row {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
         }
 
         /* Empty state */
@@ -534,18 +622,26 @@
                 <div class="install-grid">
                     <div class="install-block">
                         <div class="install-title">macOS / Linux</div>
-                        <pre class="config-example" id="install-unix"><code>curl -sSL https://{{.RootDomain}}/install.sh | sh
+                        <div class="code-block">
+                            <pre class="config-example" id="install-unix"><code>curl -sSL https://{{.RootDomain}}/install.sh | sh
 sudo mv gopublic /usr/local/bin/</code></pre>
-                        <div class="copy-row">
-                            <button class="copy-btn" id="copy-install-unix" onclick="copyTextFrom('install-unix', 'copy-install-unix')">Копировать команды</button>
+                            <button class="copy-icon-btn" data-tooltip="Скопировано!" onclick="copyCode('install-unix', this)" aria-label="Копировать">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
                     <div class="install-block">
                         <div class="install-title">Windows (PowerShell)</div>
-                        <pre class="config-example" id="install-win"><code>iwr -useb https://{{.RootDomain}}/install.ps1 | iex</code></pre>
-                        <div class="copy-row">
-                            <button class="copy-btn" id="copy-install-win" onclick="copyTextFrom('install-win', 'copy-install-win')">Копировать команду</button>
+                        <div class="code-block">
+                            <pre class="config-example" id="install-win"><code>iwr -useb https://{{.RootDomain}}/install.ps1 | iex</code></pre>
+                            <button class="copy-icon-btn" data-tooltip="Скопировано!" onclick="copyCode('install-win', this)" aria-label="Копировать">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -579,9 +675,13 @@ sudo mv gopublic /usr/local/bin/</code></pre>
                 <div class="card-label">Токен авторизации</div>
             </div>
             <div class="card-body">
-                <div class="token-display">
+                <div class="token-display-inline">
                     <div class="token-value" id="token">gopublic auth {{.Token}}</div>
-                    <button class="copy-btn" id="copy-btn" onclick="copyToken()">Копировать</button>
+                    <button class="copy-icon-btn" data-tooltip="Скопировано!" onclick="copyCode('token', this)" aria-label="Копировать">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
                 </div>
                 <p class="token-instructions">
                     Выполните эту команду для авторизации клиента
@@ -619,13 +719,20 @@ sudo mv gopublic /usr/local/bin/</code></pre>
                 <p class="config-description">
                     Создайте файл <code>gopublic.yaml</code> в корне проекта для запуска нескольких туннелей:
                 </p>
-                <pre class="config-example"><code>version: "1"
+                <div class="code-block">
+                    <pre class="config-example" id="config-yaml"><code>version: "1"
 tunnels:
 {{- range $i, $d := .Domains}}
   tunnel-{{$i}}:
     proto: http
     addr: "{{add 3000 $i}}"
     subdomain: {{$d.Name}}{{end}}</code></pre>
+                    <button class="copy-icon-btn" data-tooltip="Скопировано!" onclick="copyCode('config-yaml', this)" aria-label="Копировать">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
                 <div class="config-instructions" style="display: grid; gap: 0.5rem;">
                     <p>Запуск клиента:</p>
                     <ul style="margin-left: 1rem; display: grid; gap: 0.4rem;">
@@ -644,14 +751,17 @@ tunnels:
     </footer>
 
     <script>
-        function copyWithFeedback(text, btn) {
+        function copyCode(elementId, btn) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+
+            const text = el.textContent.trim();
+
             const doFeedback = () => {
-                btn.textContent = 'Скопировано';
                 btn.classList.add('copied');
                 setTimeout(() => {
-                    btn.textContent = 'Копировать';
                     btn.classList.remove('copied');
-                }, 2000);
+                }, 1500);
             };
 
             if (!navigator.clipboard) {
@@ -666,18 +776,6 @@ tunnels:
             }
 
             navigator.clipboard.writeText(text).then(doFeedback);
-        }
-
-        function copyTextFrom(elementId, buttonId) {
-            const el = document.getElementById(elementId);
-            const btn = document.getElementById(buttonId);
-            if (!el || !btn) return;
-            const text = el.textContent.trim();
-            copyWithFeedback(text, btn);
-        }
-
-        function copyToken() {
-            copyTextFrom('token', 'copy-btn');
         }
     </script>
 </body>

@@ -11,9 +11,9 @@ version: '3.8'
 
 services:
   server:
-    # Replace with your actual GitHub Container Registry path
-    # Format: ghcr.io/username/repository:tag
-    image: ${IMAGE_NAME:-ghcr.io/owner/gopublic:latest}
+    # Uses GitHub Container Registry image
+    # Override with IMAGE_NAME env var if needed
+    image: ${IMAGE_NAME:-ghcr.io/region23/gopublic.su:latest}
     container_name: gopublic-server
     restart: always
     env_file:
