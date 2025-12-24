@@ -1,0 +1,28 @@
+# Secrets & Config
+.env
+.env.*
+*.env
+
+# Database
+*.db
+*.sqlite
+data/
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+bin/
+dist/
+
+# Docs
+*.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
