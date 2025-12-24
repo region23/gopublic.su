@@ -30,10 +30,17 @@ go build ./...
 ```bash
 # Server (creates .env with DOMAIN_NAME=localhost, INSECURE_HTTP=true)
 go run cmd/server/main.go
+# Listens on :8080 (HTTP Ingress) and :4443 (TCP Control)
 
 # Client
 ./bin/gopublic-client auth sk_live_12345  # seed token for local dev
 ./bin/gopublic-client start 3000
+
+# Test tunnel manually
+curl -H "Host: misty-river" http://localhost:8080/
+
+# Inspector UI
+open http://localhost:4040
 ```
 
 ## Architecture
@@ -80,8 +87,10 @@ go run cmd/server/main.go
 | Variable | Purpose |
 |----------|---------|
 | `DOMAIN_NAME` | Root domain (enables HTTPS if set) |
+| `EMAIL` | For Let's Encrypt registration (required if DOMAIN_NAME set) |
 | `INSECURE_HTTP` | Set `true` for local dev without TLS |
 | `TELEGRAM_BOT_TOKEN` | For OAuth |
+| `TELEGRAM_BOT_NAME` | Bot username for login widget |
 | `SESSION_HASH_KEY` | 32-byte hex for cookie signing (optional) |
 | `SESSION_BLOCK_KEY` | 32-byte hex for cookie encryption (optional) |
 
@@ -89,3 +98,13 @@ go run cmd/server/main.go
 
 SQLite with GORM auto-migration. Tables: `users`, `tokens`, `domains`.
 Tokens stored as SHA256 hash, shown to user only once at creation.
+
+## Ports
+
+| Port | Purpose |
+|------|---------|
+| `:80` | HTTP & ACME challenges (prod) |
+| `:443` | HTTPS Ingress (prod) |
+| `:8080` | HTTP Ingress (dev mode) |
+| `:4443` | Control Plane (TCP/TLS) |
+| `:4040` | Inspector UI (client-side) |
