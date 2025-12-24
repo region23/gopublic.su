@@ -31,6 +31,15 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 		cfg = DefaultReconnectConfig()
 	}
 
+	// Monitor context cancellation and shutdown tunnel when cancelled
+	go func() {
+		<-ctx.Done()
+		log.Println("Context cancelled, shutting down tunnel...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		t.Shutdown(shutdownCtx)
+	}()
+
 	attempt := 0
 	delay := cfg.InitialDelay
 
