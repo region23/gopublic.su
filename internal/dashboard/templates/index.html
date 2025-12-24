@@ -314,6 +314,43 @@
             font-size: 0.875rem;
         }
 
+        /* Config Section */
+        .config-description {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .config-example {
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            overflow-x: auto;
+        }
+
+        .config-example code {
+            font-family: var(--font-mono);
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            white-space: pre;
+        }
+
+        .config-instructions {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .config-instructions code {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            background: var(--lumon-mint-pale);
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            color: var(--lumon-teal);
+        }
+
         /* Footer */
         .footer {
             max-width: 900px;
@@ -440,6 +477,30 @@
                 {{else}}
                 <div class="empty-state">Домены пока не назначены</div>
                 {{end}}
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <div class="card-label">Конфигурация проекта</div>
+            </div>
+            <div class="card-body">
+                <p class="config-description">
+                    Создайте файл <code>gopublic.yaml</code> в корне проекта для запуска нескольких туннелей:
+                </p>
+                <pre class="config-example"><code>version: "1"
+tunnels:
+  web:
+    proto: http
+    addr: "3000"
+    subdomain: my-app
+  api:
+    proto: http
+    addr: "8080"
+    subdomain: my-api</code></pre>
+                <p class="config-instructions">
+                    Затем запустите: <code>gopublic start</code>
+                </p>
             </div>
         </section>
     </main>
