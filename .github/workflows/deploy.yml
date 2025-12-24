@@ -61,10 +61,19 @@ jobs:
       - name: Build Clients
         env:
           SERVER_ADDR: ${{ vars.SERVER_ADDR || 'localhost:4443' }}
+          UPDATE_PUBKEY: ${{ vars.UPDATE_PUBKEY }}
         run: |
           mkdir -p dist
-          LDFLAGS="-X main.ServerAddr=${SERVER_ADDR}"
-          echo "Building clients with SERVER_ADDR=${SERVER_ADDR}"
+
+          # Determine version from tag or commit
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+
+          LDFLAGS="-X main.ServerAddr=${SERVER_ADDR} -X gopublic/internal/client/cli.Version=${VERSION} -X gopublic/internal/client/updater.PublicKeyBase64=${UPDATE_PUBKEY}"
+          echo "Building clients with SERVER_ADDR=${SERVER_ADDR}, VERSION=${VERSION}"
 
           GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/gopublic-linux-amd64 cmd/client/main.go
           GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/gopublic-linux-arm64 cmd/client/main.go
@@ -92,6 +101,64 @@ jobs:
           name: gopublic-clients
           path: dist/
 
+      - name: Compute checksums
+        run: |
+          cd dist
+          sha256sum gopublic-* > checksums.txt
+          cat checksums.txt
+
+      - name: Sign checksums
+        env:
+          ED25519_SEED_B64: ${{ secrets.ED25519_SEED_B64 }}
+        run: |
+          cd dist
+          # Use Go for signing (no external dependencies)
+          cat > /tmp/sign.go << 'SIGNEOF'
+          package main
+
+          import (
+              "crypto/ed25519"
+              "encoding/base64"
+              "fmt"
+              "os"
+          )
+
+          func main() {
+              seedB64 := os.Getenv("ED25519_SEED_B64")
+              if seedB64 == "" {
+                  fmt.Fprintln(os.Stderr, "ED25519_SEED_B64 not set")
+                  os.Exit(1)
+              }
+              seed, err := base64.StdEncoding.DecodeString(seedB64)
+              if err != nil {
+                  fmt.Fprintf(os.Stderr, "Failed to decode seed: %v\n", err)
+                  os.Exit(1)
+              }
+              if len(seed) != ed25519.SeedSize {
+                  fmt.Fprintf(os.Stderr, "Seed must be %d bytes, got %d\n", ed25519.SeedSize, len(seed))
+                  os.Exit(1)
+              }
+              privateKey := ed25519.NewKeyFromSeed(seed)
+              publicKey := privateKey.Public().(ed25519.PublicKey)
+
+              data, err := os.ReadFile("checksums.txt")
+              if err != nil {
+                  fmt.Fprintf(os.Stderr, "Failed to read checksums.txt: %v\n", err)
+                  os.Exit(1)
+              }
+
+              signature := ed25519.Sign(privateKey, data)
+              if err := os.WriteFile("checksums.sig", signature, 0644); err != nil {
+                  fmt.Fprintf(os.Stderr, "Failed to write signature: %v\n", err)
+                  os.Exit(1)
+              }
+
+              fmt.Printf("Public key (base64): %s\n", base64.StdEncoding.EncodeToString(publicKey))
+              fmt.Println("Signature written to checksums.sig")
+          }
+          SIGNEOF
+          go run /tmp/sign.go
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -101,6 +168,8 @@ jobs:
             dist/gopublic-macos-amd64
             dist/gopublic-macos-arm64
             dist/gopublic-windows-amd64.exe
+            dist/checksums.txt
+            dist/checksums.sig
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

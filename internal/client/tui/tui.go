@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"gopublic/internal/client/events"
 	"gopublic/internal/client/stats"
+	"gopublic/internal/client/updater"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -55,11 +57,17 @@ type Model struct {
 	serverLatency time.Duration
 
 	// Recent requests for display
-	requests   []RequestEntry
+	requests    []RequestEntry
 	maxRequests int
 
 	// Error message (if any)
 	lastError string
+
+	// Update state
+	updateInfo     *updater.UpdateInfo
+	updateChecked  bool
+	updateStatus   string // "", "checking", "downloading", "done", "error"
+	updateMessage  string
 }
 
 // NewModel creates a new TUI model
@@ -84,6 +92,14 @@ func NewModel(eventBus *events.Bus, statsTracker *stats.Stats) Model {
 // Messages
 type tickMsg time.Time
 type eventMsg events.Event
+type updateCheckMsg struct {
+	info *updater.UpdateInfo
+	err  error
+}
+type updateResultMsg struct {
+	result *updater.UpdateResult
+	err    error
+}
 
 // Commands
 func tickCmd() tea.Cmd {
@@ -105,9 +121,27 @@ func waitForEvent(sub <-chan events.Event) tea.Cmd {
 	}
 }
 
+func checkForUpdateCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		info, err := updater.CheckForUpdate(ctx, Version)
+		return updateCheckMsg{info: info, err: err}
+	}
+}
+
+func performUpdateCmd(info *updater.UpdateInfo) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		result, err := updater.PerformUpdate(ctx, info)
+		return updateResultMsg{result: result, err: err}
+	}
+}
+
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tickCmd()}
+	cmds := []tea.Cmd{tickCmd(), checkForUpdateCmd()}
 	if m.eventSub != nil {
 		cmds = append(cmds, waitForEvent(m.eventSub))
 	}
@@ -121,6 +155,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "ctrl+u", "u":
+			// Trigger update if available
+			if m.updateInfo != nil && m.updateInfo.Available && m.updateStatus == "" {
+				m.updateStatus = "downloading"
+				m.updateMessage = "Downloading update..."
+				return m, performUpdateCmd(m.updateInfo)
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -134,6 +175,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventMsg:
 		m = m.handleEvent(events.Event(msg))
 		return m, waitForEvent(m.eventSub)
+
+	case updateCheckMsg:
+		m.updateChecked = true
+		if msg.err != nil {
+			// Silently ignore update check errors
+			return m, nil
+		}
+		m.updateInfo = msg.info
+		return m, nil
+
+	case updateResultMsg:
+		if msg.err != nil {
+			m.updateStatus = "error"
+			m.updateMessage = msg.err.Error()
+		} else if msg.result != nil {
+			m.updateStatus = "done"
+			m.updateMessage = msg.result.Message
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -235,7 +295,14 @@ func (m Model) View() string {
 
 func (m Model) renderHeader() string {
 	title := titleStyle.Render("gopublic")
-	hint := hintStyle.Render("(Ctrl+C to quit)")
+
+	// Build hint based on update status
+	var hint string
+	if m.updateInfo != nil && m.updateInfo.Available && m.updateStatus == "" {
+		hint = hintStyle.Render("(Ctrl+C quit, ") + updateAvailableStyle.Render("U update") + hintStyle.Render(")")
+	} else {
+		hint = hintStyle.Render("(Ctrl+C to quit)")
+	}
 
 	// Calculate spacing
 	spacing := ""
@@ -259,8 +326,26 @@ func (m Model) renderStatus() string {
 	// Session Status
 	lines = append(lines, m.renderField("Session Status", StatusText(m.status)))
 
-	// Version
-	lines = append(lines, m.renderField("Version", Version))
+	// Version with update info
+	versionStr := Version
+	if m.updateInfo != nil && m.updateInfo.Available {
+		versionStr = Version + " " + updateAvailableStyle.Render("→ "+m.updateInfo.LatestVersion+" available")
+	}
+	lines = append(lines, m.renderField("Version", versionStr))
+
+	// Update status (if downloading or completed)
+	if m.updateStatus != "" {
+		var statusText string
+		switch m.updateStatus {
+		case "downloading":
+			statusText = updateDownloadingStyle.Render(m.updateMessage)
+		case "done":
+			statusText = updateDoneStyle.Render(m.updateMessage)
+		case "error":
+			statusText = updateErrorStyle.Render(m.updateMessage)
+		}
+		lines = append(lines, m.renderField("Update", statusText))
+	}
 
 	// Latency
 	latencyStr := "-"

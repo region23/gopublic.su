@@ -91,6 +91,21 @@ var (
 
 	durationStyle = lipgloss.NewStyle().
 			Foreground(colorDim)
+
+	// Update available style
+	updateAvailableStyle = lipgloss.NewStyle().
+				Foreground(colorGreen).
+				Bold(true)
+
+	// Update status styles
+	updateDownloadingStyle = lipgloss.NewStyle().
+				Foreground(colorYellow)
+
+	updateErrorStyle = lipgloss.NewStyle().
+				Foreground(colorRed)
+
+	updateDoneStyle = lipgloss.NewStyle().
+			Foreground(colorGreen)
 )
 
 // StatusText returns styled status text
