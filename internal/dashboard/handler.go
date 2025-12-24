@@ -26,11 +26,12 @@ import (
 var templateFS embed.FS
 
 type Handler struct {
-	BotToken   string
-	BotName    string
-	Domain     string
-	GitHubRepo string
-	Session    *auth.SessionManager
+	BotToken       string
+	BotName        string
+	Domain         string
+	GitHubRepo     string
+	DomainsPerUser int
+	Session        *auth.SessionManager
 }
 
 // NewHandlerWithConfig creates a new dashboard handler with the given configuration.
@@ -46,11 +47,12 @@ func NewHandlerWithConfig(cfg *config.Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		BotToken:   cfg.TelegramBotToken,
-		BotName:    cfg.TelegramBotName,
-		Domain:     cfg.Domain,
-		GitHubRepo: cfg.GitHubRepo,
-		Session:    sessionMgr,
+		BotToken:       cfg.TelegramBotToken,
+		BotName:        cfg.TelegramBotName,
+		Domain:         cfg.Domain,
+		GitHubRepo:     cfg.GitHubRepo,
+		DomainsPerUser: cfg.DomainsPerUser,
+		Session:        sessionMgr,
 	}, nil
 }
 
@@ -79,8 +81,13 @@ func NewHandler() (*Handler, error) {
 }
 
 func (h *Handler) LoadTemplates(r *gin.Engine) error {
-	// Parse templates
-	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
+	// Define template functions
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+	}
+
+	// Parse templates with functions
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return err
 	}
@@ -186,7 +193,7 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 		prefixes := []string{"misty", "silent", "bold", "rapid", "cool"}
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
 		var domains []string
-		for i := 0; i < 3; i++ {
+		for i := 0; i < h.DomainsPerUser; i++ {
 			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
 			domains = append(domains, name)
 		}

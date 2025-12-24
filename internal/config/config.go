@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/hex"
 	"os"
+	"strconv"
 
 	apperrors "gopublic/internal/errors"
 )
@@ -27,6 +28,9 @@ type Config struct {
 	// GitHub repository for client downloads (e.g., "username/gopublic")
 	GitHubRepo string
 
+	// Number of domains to assign per new user (default: 2)
+	DomainsPerUser int
+
 	// Session keys (32 bytes each)
 	SessionHashKey  []byte
 	SessionBlockKey []byte
@@ -41,6 +45,14 @@ var (
 
 // LoadFromEnv loads configuration from environment variables
 func LoadFromEnv() (*Config, error) {
+	// Parse domains per user (default: 2)
+	domainsPerUser := 2
+	if val := os.Getenv("DOMAINS_PER_USER"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			domainsPerUser = n
+		}
+	}
+
 	cfg := &Config{
 		Domain:           os.Getenv("DOMAIN_NAME"),
 		ProjectName:      getEnvOrDefault("PROJECT_NAME", "Go Public"),
@@ -52,6 +64,7 @@ func LoadFromEnv() (*Config, error) {
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		TelegramBotName:  os.Getenv("TELEGRAM_BOT_NAME"),
 		GitHubRepo:       os.Getenv("GITHUB_REPO"),
+		DomainsPerUser:   domainsPerUser,
 	}
 
 	// Parse session keys

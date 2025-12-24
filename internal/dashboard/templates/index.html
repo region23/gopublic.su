@@ -504,11 +504,11 @@
             </div>
             <div class="card-body">
                 <div class="token-display">
-                    <div class="token-value" id="token">{{.Token}}</div>
+                    <div class="token-value" id="token">gopublic auth {{.Token}}</div>
                     <button class="copy-btn" id="copy-btn" onclick="copyToken()">Копировать</button>
                 </div>
                 <p class="token-instructions">
-                    Настройте клиент: <code>gopublic auth ВАШ_ТОКЕН</code>
+                    Выполните эту команду для авторизации клиента
                 </p>
             </div>
         </section>
@@ -581,11 +581,11 @@ iwr -useb https://{{.RootDomain}}/install.ps1 | iex</code></pre>
                 </p>
                 <pre class="config-example"><code>version: "1"
 tunnels:
-{{- range $i, $d := .Domains}}{{if lt $i 2}}
-  {{if eq $i 0}}web{{else}}api{{end}}:
+{{- range $i, $d := .Domains}}
+  tunnel-{{$i}}:
     proto: http
-    addr: "{{if eq $i 0}}3000{{else}}8080{{end}}"
-    subdomain: {{$d.Name}}{{end}}{{end}}</code></pre>
+    addr: "{{add 3000 $i}}"
+    subdomain: {{$d.Name}}{{end}}</code></pre>
                 <p class="config-instructions">
                     Затем запустите: <code>gopublic start</code>
                 </p>
