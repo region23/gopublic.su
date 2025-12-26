@@ -34,6 +34,13 @@ type RequestEntry struct {
 	Time     time.Time
 }
 
+// LogEntry represents a log message for display
+type LogEntry struct {
+	Level   string
+	Message string
+	Time    time.Time
+}
+
 // Model is the main Bubble Tea model
 type Model struct {
 	// Connection state
@@ -67,16 +74,23 @@ type Model struct {
 	// Error message (if any)
 	lastError string
 
+	// Log messages for display
+	logs    []LogEntry
+	maxLogs int
+
 	// Update state
 	updateInfo     *updater.UpdateInfo
 	updateChecked  bool
 	updateStatus   string // "", "checking", "downloading", "done", "error"
 	updateMessage  string
 
-	// Server bandwidth stats
+	// Server bandwidth stats (initial values from server)
 	serverBandwidthToday int64
 	serverBandwidthTotal int64
 	serverBandwidthLimit int64
+
+	// Session bandwidth (accumulated during this session)
+	sessionBandwidth int64
 }
 
 // NewModel creates a new TUI model
@@ -95,6 +109,8 @@ func NewModel(eventBus *events.Bus, statsTracker *stats.Stats) Model {
 		startTime:   time.Now(),
 		requests:    make([]RequestEntry, 0),
 		maxRequests: 10,
+		logs:        make([]LogEntry, 0),
+		maxLogs:     5,
 	}
 }
 
@@ -276,11 +292,36 @@ func (m Model) handleEvent(event events.Event) Model {
 			if len(m.requests) > m.maxRequests {
 				m.requests = m.requests[:m.maxRequests]
 			}
+			// Update session bandwidth
+			m.sessionBandwidth += data.Bytes
 		}
 
 	case events.EventError:
 		if data, ok := event.Data.(events.ErrorData); ok {
 			m.lastError = fmt.Sprintf("%s: %v", data.Context, data.Error)
+			// Also add to logs
+			entry := LogEntry{
+				Level:   "error",
+				Message: m.lastError,
+				Time:    time.Now(),
+			}
+			m.logs = append([]LogEntry{entry}, m.logs...)
+			if len(m.logs) > m.maxLogs {
+				m.logs = m.logs[:m.maxLogs]
+			}
+		}
+
+	case events.EventLog:
+		if data, ok := event.Data.(events.LogData); ok {
+			entry := LogEntry{
+				Level:   data.Level,
+				Message: data.Message,
+				Time:    time.Now(),
+			}
+			m.logs = append([]LogEntry{entry}, m.logs...)
+			if len(m.logs) > m.maxLogs {
+				m.logs = m.logs[:m.maxLogs]
+			}
 		}
 	}
 
@@ -312,6 +353,11 @@ func (m Model) View() string {
 	// Recent requests
 	if len(m.requests) > 0 {
 		b.WriteString(m.renderRequests())
+	}
+
+	// Logs section (show if there are any logs)
+	if len(m.logs) > 0 {
+		b.WriteString(m.renderLogs())
 	}
 
 	return b.String()
@@ -451,9 +497,13 @@ func (m Model) renderStats() string {
 			statsHeaderStyle.Render("limit")
 		lines = append(lines, bandwidthLine)
 
+		// Calculate current bandwidth: server initial + session accumulated
+		currentToday := m.serverBandwidthToday + m.sessionBandwidth
+		currentTotal := m.serverBandwidthTotal + m.sessionBandwidth
+
 		bandwidthValueRow := labelStyle.Render("") +
-			statsValueStyle.Render(formatBytesShort(m.serverBandwidthToday)) +
-			statsValueStyle.Render(formatBytesShort(m.serverBandwidthTotal)) +
+			statsValueStyle.Render(formatBytesShort(currentToday)) +
+			statsValueStyle.Render(formatBytesShort(currentTotal)) +
 			statsValueStyle.Render(formatBytesShort(m.serverBandwidthLimit))
 		lines = append(lines, bandwidthValueRow)
 	}
@@ -473,6 +523,35 @@ func (m Model) renderRequests() string {
 		duration := durationStyle.Render(formatDuration(req.Duration))
 
 		line := fmt.Sprintf("%s %s %s %s", method, path, status, duration)
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderLogs() string {
+	var lines []string
+	lines = append(lines, "") // Empty line before
+	lines = append(lines, labelStyle.Render("Logs"))
+
+	for _, log := range m.logs {
+		var levelStyle lipgloss.Style
+		switch log.Level {
+		case "error":
+			levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // Red
+		case "warn":
+			levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow
+		default:
+			levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray
+		}
+
+		// Truncate long messages
+		msg := log.Message
+		if len(msg) > 70 {
+			msg = msg[:67] + "..."
+		}
+
+		line := levelStyle.Render(msg)
 		lines = append(lines, line)
 	}
 

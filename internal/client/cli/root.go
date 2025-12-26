@@ -11,6 +11,7 @@ import (
 	"gopublic/internal/client/config"
 	"gopublic/internal/client/events"
 	"gopublic/internal/client/inspector"
+	"gopublic/internal/client/logger"
 	"gopublic/internal/client/stats"
 	"gopublic/internal/client/tui"
 	"gopublic/internal/client/tunnel"
@@ -255,6 +256,11 @@ func runWithTUI(ctx context.Context, eventBus *events.Bus, statsTracker *stats.S
 	// Create context that will be cancelled when TUI exits
 	tuiCtx, tuiCancel := context.WithCancel(ctx)
 	defer tuiCancel()
+
+	// Enable TUI mode for logger - redirect logs to event bus
+	logger.SetEventBus(eventBus)
+	logger.SetTUIMode(true)
+	defer logger.SetTUIMode(false)
 
 	// Start tunnel in background
 	tunnelDone := make(chan error, 1)

@@ -83,7 +83,7 @@ jobs:
             VERSION="dev-$(git rev-parse --short HEAD)"
           fi
 
-          LDFLAGS="-X main.ServerAddr=${SERVER_ADDR} -X gopublic/internal/client/cli.Version=${VERSION} -X gopublic/internal/client/updater.PublicKeyBase64=${UPDATE_PUBKEY}"
+          LDFLAGS="-X main.ServerAddr=${SERVER_ADDR} -X gopublic/internal/version.Version=${VERSION} -X gopublic/internal/client/updater.PublicKeyBase64=${UPDATE_PUBKEY}"
           echo "Building clients with SERVER_ADDR=${SERVER_ADDR}, VERSION=${VERSION}"
 
           GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/gopublic-linux-amd64 cmd/client/main.go

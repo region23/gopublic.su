@@ -619,6 +619,7 @@ func (h *Handler) YandexAuth(c *gin.Context) {
 	params.Set("client_id", h.YandexClientID)
 	params.Set("redirect_uri", h.getYandexRedirectURL())
 	params.Set("state", state)
+	params.Set("scope", "login:email login:info login:avatar")
 
 	authURL := "https://oauth.yandex.ru/authorize?" + params.Encode()
 	c.Redirect(http.StatusTemporaryRedirect, authURL)

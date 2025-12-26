@@ -3,8 +3,9 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
+
+	"gopublic/internal/client/logger"
 )
 
 // TunnelManager coordinates multiple tunnel connections
@@ -71,7 +72,7 @@ func (tm *TunnelManager) StartAll(ctx context.Context) error {
 
 		go func(mt *ManagedTunnel, ctx context.Context) {
 			defer wg.Done()
-			log.Printf("Starting tunnel '%s': localhost:%s -> %s", mt.Name, mt.Tunnel.LocalPort, mt.Subdomain)
+			logger.Info("Starting tunnel '%s': localhost:%s -> %s", mt.Name, mt.Tunnel.LocalPort, mt.Subdomain)
 
 			err := mt.Tunnel.StartWithReconnect(ctx, nil)
 			if err != nil && err != context.Canceled {

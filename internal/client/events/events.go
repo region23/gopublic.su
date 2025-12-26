@@ -25,6 +25,9 @@ const (
 	// Error events
 	EventError
 
+	// Log events (for TUI display)
+	EventLog
+
 	// Tunnel info events
 	EventTunnelReady
 )
@@ -48,6 +51,8 @@ func (t EventType) String() string {
 		return "request_complete"
 	case EventError:
 		return "error"
+	case EventLog:
+		return "log"
 	case EventTunnelReady:
 		return "tunnel_ready"
 	default:
@@ -100,6 +105,12 @@ type TunnelReadyData struct {
 	LocalPort    string
 	BoundDomains []string
 	Scheme       string
+}
+
+// LogData contains data for EventLog.
+type LogData struct {
+	Level   string // "info", "warn", "error"
+	Message string
 }
 
 // ConnectionStatusData contains data for EventConnectionStatus.
@@ -200,6 +211,14 @@ func (b *Bus) PublishError(err error, context string) {
 	b.Publish(Event{
 		Type: EventError,
 		Data: ErrorData{Error: err, Context: context},
+	})
+}
+
+// PublishLog publishes a log event.
+func (b *Bus) PublishLog(level, message string) {
+	b.Publish(Event{
+		Type: EventLog,
+		Data: LogData{Level: level, Message: message},
 	})
 }
 

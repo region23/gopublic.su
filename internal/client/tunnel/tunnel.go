@@ -8,17 +8,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gopublic/internal/client/events"
-	"gopublic/internal/client/inspector"
-	"gopublic/internal/client/stats"
-	"gopublic/pkg/protocol"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"gopublic/internal/client/events"
+	"gopublic/internal/client/inspector"
+	"gopublic/internal/client/logger"
+	"gopublic/internal/client/stats"
+	"gopublic/pkg/protocol"
 
 	"github.com/hashicorp/yamux"
 )
@@ -142,7 +143,7 @@ func (t *Tunnel) Start() error {
 
 	if isLocal {
 		t.publishStatus("dialing", fmt.Sprintf("Connecting to %s (plain TCP)...", t.ServerAddr))
-		log.Printf("Local server detected on %s, using plain TCP", t.ServerAddr)
+		logger.Info("Local server detected on %s, using plain TCP", t.ServerAddr)
 		conn, err := net.DialTimeout("tcp", t.ServerAddr, dialTimeout)
 		if err != nil {
 			t.publishStatus("error", fmt.Sprintf("Connection failed: %v", err))
@@ -169,7 +170,7 @@ func (t *Tunnel) Start() error {
 	conn, err := tls.DialWithDialer(dialer, "tcp", t.ServerAddr, tlsConfig)
 	if err != nil {
 		t.publishStatus("tls_fallback", fmt.Sprintf("TLS failed: %v, trying plain TCP...", err))
-		log.Printf("TLS connection failed, trying plain TCP: %v", err)
+		logger.Warn("TLS connection failed, trying plain TCP: %v", err)
 		connPlain, errPlain := net.DialTimeout("tcp", t.ServerAddr, dialTimeout)
 		if errPlain != nil {
 			t.publishStatus("error", fmt.Sprintf("Connection failed: %v", errPlain))
@@ -308,7 +309,7 @@ func (t *Tunnel) handleSession(conn net.Conn, connectStart time.Time) error {
 	}
 
 	// Log to console (legacy output, will be replaced by TUI)
-	fmt.Printf("Tunnel Established! Incoming traffic on:\n")
+	fmt.Printf("\nTunnel Established! Incoming traffic on:\n")
 	for _, d := range resp.BoundDomains {
 		fmt.Printf(" - %s://%s -> localhost:%s\n", scheme, d, t.LocalPort)
 	}
@@ -357,7 +358,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 	// Dial Local
 	local, err := net.Dial("tcp", "localhost:"+t.LocalPort)
 	if err != nil {
-		log.Printf("Failed to dial local port %s: %v", t.LocalPort, err)
+		logger.Error("Failed to dial local port %s: %v", t.LocalPort, err)
 		t.publishEvent(events.EventError, events.ErrorData{Error: err, Context: "dial_local"})
 		return
 	}
@@ -384,7 +385,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 		var readErr error
 		reqBody, readErr = io.ReadAll(req.Body)
 		if readErr != nil {
-			log.Printf("Failed to read request body: %v", readErr)
+			logger.Warn("Failed to read request body: %v", readErr)
 			// Continue with empty body rather than silent failure
 			reqBody = []byte{}
 		}
@@ -394,7 +395,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 
 	// Forward Request to Local
 	if err := req.Write(local); err != nil {
-		log.Printf("Failed to write request to local: %v", err)
+		logger.Error("Failed to write request to local: %v", err)
 		t.publishEvent(events.EventError, events.ErrorData{Error: err, Context: "write_request"})
 		return
 	}
@@ -403,7 +404,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 	respReader := bufio.NewReader(local)
 	resp, err := http.ReadResponse(respReader, req)
 	if err != nil {
-		log.Printf("Failed to read response from local: %v", err)
+		logger.Error("Failed to read response from local: %v", err)
 		// Record failed request to inspector
 		inspector.AddExchange(req, reqBody, nil, nil, time.Since(startTime))
 		t.publishEvent(events.EventError, events.ErrorData{Error: err, Context: "read_response"})
@@ -417,7 +418,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 		var readErr error
 		respBody, readErr = io.ReadAll(resp.Body)
 		if readErr != nil {
-			log.Printf("Failed to read response body: %v", readErr)
+			logger.Warn("Failed to read response body: %v", readErr)
 			// Continue with empty body rather than silent failure
 			respBody = []byte{}
 		}
@@ -446,7 +447,7 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 
 	// Forward Response back to Remote
 	if err := resp.Write(remote); err != nil {
-		log.Printf("Failed to write response to remote: %v", err)
+		logger.Error("Failed to write response to remote: %v", err)
 		t.publishEvent(events.EventError, events.ErrorData{Error: err, Context: "write_response"})
 		return
 	}
@@ -463,7 +464,7 @@ func (t *Tunnel) copyBidirectional(local, remote net.Conn) {
 		defer wg.Done()
 		_, err := io.Copy(local, remote)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-			log.Printf("Error copying remote->local: %v", err)
+			logger.Warn("Error copying remote->local: %v", err)
 		}
 		// Half-close: signal EOF to local
 		if tcpConn, ok := local.(*net.TCPConn); ok {
@@ -476,7 +477,7 @@ func (t *Tunnel) copyBidirectional(local, remote net.Conn) {
 		defer wg.Done()
 		_, err := io.Copy(remote, local)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-			log.Printf("Error copying local->remote: %v", err)
+			logger.Warn("Error copying local->remote: %v", err)
 		}
 		// Half-close: signal EOF to remote
 		if tcpConn, ok := remote.(*net.TCPConn); ok {

@@ -3,8 +3,9 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
+
+	"gopublic/internal/client/logger"
 )
 
 // ReconnectConfig holds reconnection parameters
@@ -34,7 +35,7 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 	// Monitor context cancellation and shutdown tunnel when cancelled
 	go func() {
 		<-ctx.Done()
-		log.Println("Context cancelled, shutting down tunnel...")
+		logger.Info("Context cancelled, shutting down tunnel...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		t.Shutdown(shutdownCtx)
@@ -47,7 +48,7 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 		// Check if context is cancelled
 		select {
 		case <-ctx.Done():
-			log.Println("Tunnel shutdown requested")
+			logger.Info("Tunnel shutdown requested")
 			return ctx.Err()
 		default:
 		}
@@ -62,30 +63,30 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 
 		// Wait before reconnecting (except first attempt)
 		if attempt > 1 {
-			log.Printf("Reconnecting in %v (attempt %d)...", delay, attempt)
+			logger.Info("Reconnecting in %v (attempt %d)...", delay, attempt)
 			t.publishStatus("reconnecting", fmt.Sprintf("Reconnecting in %v (attempt %d)...", delay, attempt))
 
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
-				log.Println("Tunnel shutdown requested during reconnect wait")
+				logger.Info("Tunnel shutdown requested during reconnect wait")
 				return ctx.Err()
 			}
 		}
 
 		// Try to connect
-		log.Printf("Connecting to %s...", t.ServerAddr)
+		logger.Info("Connecting to %s...", t.ServerAddr)
 		err := t.Start()
 
 		if err != nil {
 			// Don't retry on "already connected" error - this is not transient
 			if IsAlreadyConnectedError(err) {
-				log.Printf("Session conflict: %v", err)
+				logger.Error("Session conflict: %v", err)
 				t.publishStatus("error", fmt.Sprintf("Session conflict: %v", err))
 				return err
 			}
 
-			log.Printf("Connection failed: %v", err)
+			logger.Warn("Connection failed: %v", err)
 			t.publishStatus("connection_failed", fmt.Sprintf("Connection failed: %v (retry in %v)", err, delay))
 
 			// Exponential backoff
@@ -98,7 +99,7 @@ func (t *Tunnel) StartWithReconnect(ctx context.Context, cfg *ReconnectConfig) e
 
 		// Connection was successful but ended (session closed)
 		// This happens when handleSession returns normally (e.g., server closed connection)
-		log.Println("Connection ended, will reconnect...")
+		logger.Info("Connection ended, will reconnect...")
 		t.publishStatus("disconnected", "Connection ended, reconnecting...")
 
 		// Reset backoff on successful connection
