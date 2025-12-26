@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   server:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
     container_name: gopublic-server
     restart: always
     env_file:

@@ -58,16 +58,16 @@ func NewHandlerWithConfig(cfg *config.Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		BotToken:           cfg.TelegramBotToken,
-		BotName:            cfg.TelegramBotName,
-		Domain:             cfg.Domain,
-		GitHubRepo:         cfg.GitHubRepo,
-		DomainsPerUser:     cfg.DomainsPerUser,
+		BotToken:            cfg.TelegramBotToken,
+		BotName:             cfg.TelegramBotName,
+		Domain:              cfg.Domain,
+		GitHubRepo:          cfg.GitHubRepo,
+		DomainsPerUser:      cfg.DomainsPerUser,
 		DailyBandwidthLimit: cfg.DailyBandwidthLimit,
-		AdminTelegramID:    cfg.AdminTelegramID,
-		YandexClientID:     cfg.YandexClientID,
-		YandexClientSecret: cfg.YandexClientSecret,
-		Session:            sessionMgr,
+		AdminTelegramID:     cfg.AdminTelegramID,
+		YandexClientID:      cfg.YandexClientID,
+		YandexClientSecret:  cfg.YandexClientSecret,
+		Session:             sessionMgr,
 	}, nil
 }
 
@@ -376,11 +376,11 @@ func (h *Handler) verifyTelegramHash(params map[string][]string) bool {
 // Terms displays the Terms of Service page
 func (h *Handler) Terms(c *gin.Context) {
 	c.HTML(http.StatusOK, "terms.html", gin.H{
-		"GitHubRepo":          h.GitHubRepo,
-		"Version":             version.Version,
-		"LastUpdated":         "26 декабря 2024",
+		"GitHubRepo":            h.GitHubRepo,
+		"Version":               version.Version,
+		"LastUpdated":           "26 декабря 2025",
 		"DailyBandwidthLimitMB": h.DailyBandwidthLimit / (1024 * 1024),
-		"DomainsPerUser":      h.DomainsPerUser,
+		"DomainsPerUser":        h.DomainsPerUser,
 	})
 }
 
