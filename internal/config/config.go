@@ -32,6 +32,11 @@ type Config struct {
 	// Admin notifications
 	AdminTelegramID int64 // Telegram user ID for abuse reports
 
+	// Sentry error tracking
+	SentryDSN         string  // Sentry DSN
+	SentryEnvironment string  // Environment name (production, staging, development)
+	SentrySampleRate  float64 // Sample rate for error tracking (0.0 - 1.0)
+
 	// GitHub repository for client downloads (e.g., "username/gopublic")
 	GitHubRepo string
 
@@ -79,6 +84,14 @@ func LoadFromEnv() (*Config, error) {
 		}
 	}
 
+	// Parse Sentry sample rate (default: 1.0)
+	sentrySampleRate := 1.0
+	if val := os.Getenv("SENTRY_SAMPLE_RATE"); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil && f >= 0 && f <= 1 {
+			sentrySampleRate = f
+		}
+	}
+
 	cfg := &Config{
 		Domain:              os.Getenv("DOMAIN_NAME"),
 		ProjectName:         getEnvOrDefault("PROJECT_NAME", "Go Public"),
@@ -92,6 +105,9 @@ func LoadFromEnv() (*Config, error) {
 		YandexClientID:      os.Getenv("YANDEX_CLIENT_ID"),
 		YandexClientSecret:  os.Getenv("YANDEX_CLIENT_SECRET"),
 		AdminTelegramID:     adminTelegramID,
+		SentryDSN:           os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:   getEnvOrDefault("SENTRY_ENVIRONMENT", "development"),
+		SentrySampleRate:    sentrySampleRate,
 		GitHubRepo:          os.Getenv("GITHUB_REPO"),
 		DomainsPerUser:      domainsPerUser,
 		DailyBandwidthLimit: dailyBandwidthLimit,
@@ -171,6 +187,11 @@ func (c *Config) HasTelegramOAuth() bool {
 // HasAdminNotifications returns true if admin Telegram notifications are configured
 func (c *Config) HasAdminNotifications() bool {
 	return c.AdminTelegramID != 0 && c.TelegramBotToken != ""
+}
+
+// HasSentry returns true if Sentry is configured
+func (c *Config) HasSentry() bool {
+	return c.SentryDSN != ""
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

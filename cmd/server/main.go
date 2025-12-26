@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/acme/autocert"
 
@@ -37,6 +38,22 @@ func main() {
 
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("Invalid configuration: %v", err)
+	}
+
+	// Initialize Sentry (if configured)
+	if cfg.HasSentry() {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.SentryEnvironment,
+			SampleRate:       cfg.SentrySampleRate,
+			AttachStacktrace: true,
+		})
+		if err != nil {
+			log.Printf("Warning: Sentry initialization failed: %v", err)
+		} else {
+			log.Println("Sentry error tracking initialized")
+			defer sentry.Flush(2 * time.Second)
+		}
 	}
 
 	// 2. Initialize Database

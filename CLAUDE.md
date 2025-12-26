@@ -136,6 +136,14 @@ open http://localhost:4040
 |----------|---------|---------|
 | `ADMIN_TELEGRAM_ID` | Telegram user ID for abuse report notifications | *empty* |
 
+### Error Tracking
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `SENTRY_DSN` | Sentry DSN for error tracking | *empty* |
+| `SENTRY_ENVIRONMENT` | Environment name (production, staging, development) | `development` |
+| `SENTRY_SAMPLE_RATE` | Error sample rate (0.0 - 1.0) | `1.0` |
+
 ## Database
 
 SQLite with GORM auto-migration. Tables:

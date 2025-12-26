@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 
 	"gopublic/internal/config"
 	"gopublic/internal/dashboard"
@@ -33,6 +34,7 @@ type Ingress struct {
 	IsSecure            bool   // Whether running in secure mode
 	GitHubRepo          string // GitHub repo for client downloads (e.g., "username/gopublic")
 	DailyBandwidthLimit int64  // Daily bandwidth limit per user in bytes (0 = unlimited)
+	SentryEnabled       bool   // Whether Sentry is configured
 }
 
 // NewIngressWithConfig creates a new ingress with the given configuration.
@@ -46,6 +48,7 @@ func NewIngressWithConfig(cfg *config.Config, registry *server.TunnelRegistry, d
 		IsSecure:            cfg.IsSecure(),
 		GitHubRepo:          cfg.GitHubRepo,
 		DailyBandwidthLimit: cfg.DailyBandwidthLimit,
+		SentryEnabled:       cfg.HasSentry(),
 	}
 }
 
@@ -70,6 +73,13 @@ func (i *Ingress) Handler() http.Handler {
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.Default()
+
+	// Add Sentry middleware if configured (must be before other middleware to capture panics)
+	if i.SentryEnabled {
+		r.Use(sentrygin.New(sentrygin.Options{
+			Repanic: true, // Let gin.Default's Recovery handle the response
+		}))
+	}
 
 	// Add CSRF middleware for dashboard routes
 	r.Use(middleware.SetCSRFToken(&middleware.CSRFConfig{Secure: i.IsSecure}))
