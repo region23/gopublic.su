@@ -1198,6 +1198,24 @@ tunnels:
                 <span class="collapse-icon">▶</span>
             </div>
             <div class="card-body collapsible-content">
+                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-light);">
+                    <p class="config-description" style="margin-bottom: 1rem;"><strong>Статистика трафика</strong></p>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value">{{formatBytes .BandwidthToday}}</div>
+                            <div class="stat-label">Использовано сегодня</div>
+                            <div class="stat-limit">из {{formatBytes .BandwidthLimit}}</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{{formatBytes .BandwidthTotal}}</div>
+                            <div class="stat-label">Всего за всё время</div>
+                        </div>
+                    </div>
+                </div>
+
                 <p class="config-description" style="margin-bottom: 1rem;"><strong>Привязанные аккаунты</strong></p>
                 <div class="linked-accounts">
                     <div class="account-item">
@@ -1241,24 +1259,6 @@ tunnels:
                         <a href="/auth/yandex" class="link-btn" onclick="event.stopPropagation();">Привязать</a>
                         {{end}}
                         {{end}}
-                    </div>
-                </div>
-
-                <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-light);">
-                    <p class="config-description" style="margin-bottom: 1rem;"><strong>Статистика трафика</strong></p>
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-value">{{formatBytes .BandwidthToday}}</div>
-                            <div class="stat-label">Использовано сегодня</div>
-                            <div class="stat-limit">из {{formatBytes .BandwidthLimit}}</div>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
-                            </div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">{{formatBytes .BandwidthTotal}}</div>
-                            <div class="stat-label">Всего за всё время</div>
-                        </div>
                     </div>
                 </div>
             </div>
