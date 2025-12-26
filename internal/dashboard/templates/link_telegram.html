@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Привязать Telegram — GoPublic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --lumon-teal: #0d7377;
+            --lumon-teal-light: #14919b;
+            --lumon-mint: #a8dadc;
+            --lumon-mint-pale: #d4ecec;
+            --bg-cream: #f5f5dc;
+            --bg-paper: #faf9f6;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a5a;
+            --text-muted: #7a7a8a;
+            --border-light: #d1d5db;
+            --shadow-soft: 0 2px 8px rgba(13, 115, 119, 0.08);
+            --shadow-card: 0 8px 32px rgba(26, 26, 46, 0.08);
+            --font-primary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background-color: var(--bg-cream);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-primary);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .brand {
+            text-align: center;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .brand-icon {
+            width: 12px;
+            height: 12px;
+            background: linear-gradient(135deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+
+        .brand-name {
+            font-size: 1.75rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+        }
+
+        .card {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            box-shadow: var(--shadow-card);
+            padding: 2.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 0 0 4px 0;
+        }
+
+        .card-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .card-title {
+            font-size: 0.9375rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-paper);
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--lumon-mint);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            color: var(--lumon-teal);
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .user-email {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .auth-widget {
+            display: flex;
+            justify-content: center;
+            padding: 0.5rem 0;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 1.5rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s ease;
+        }
+
+        .back-link:hover {
+            color: var(--lumon-teal);
+        }
+
+        .footer {
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .footer-link {
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--lumon-teal);
+        }
+
+        .footer-separator {
+            width: 20px;
+            height: 1px;
+            background: var(--border-light);
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 1.5rem;
+            }
+
+            .card {
+                padding: 2rem 1.5rem;
+            }
+
+            .brand-name {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brand">
+            <div class="brand-mark">
+                <div class="brand-icon"></div>
+                <h1 class="brand-name">GoPublic</h1>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Привязать Telegram</h2>
+                <p class="card-subtitle">Добавьте второй способ входа в аккаунт</p>
+            </div>
+
+            <div class="user-info">
+                <div class="user-avatar">
+                    {{if .User.FirstName}}{{slice .User.FirstName 0 1}}{{else}}?{{end}}
+                </div>
+                <div class="user-details">
+                    <div class="user-name">{{.User.FirstName}} {{.User.LastName}}</div>
+                    {{if .User.Email}}<div class="user-email">{{.User.Email}}</div>{{end}}
+                </div>
+            </div>
+
+            <div class="auth-widget">
+                <script async src="https://telegram.org/js/telegram-widget.js?22"
+                        data-telegram-login="{{.BotName}}"
+                        data-size="large"
+                        data-auth-url="{{.AuthURL}}"
+                        data-request-access="write"></script>
+            </div>
+
+            <a href="/" class="back-link">← Вернуться в личный кабинет</a>
+        </div>
+
+        <footer class="footer">
+            <a href="https://makeitbeta.ru" target="_blank" rel="noopener noreferrer" class="footer-link">Разработано в Make It Beta</a>
+            <span class="footer-separator"></span>
+            <a href="/terms" class="footer-link">Условия использования</a>
+            {{if .GitHubRepo}}
+            <span class="footer-separator"></span>
+            <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
+            {{end}}
+        </footer>
+    </div>
+</body>
+</html>

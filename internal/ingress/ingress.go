@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"gopublic/internal/dashboard"
 	"gopublic/internal/middleware"
 	"gopublic/internal/server"
+	"gopublic/internal/storage"
 	"gopublic/internal/version"
 )
 
@@ -23,25 +25,27 @@ import (
 var hostPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
 
 type Ingress struct {
-	Registry    *server.TunnelRegistry
-	DashHandler *dashboard.Handler
-	Port        string
-	RootDomain  string // Root domain for routing
-	ProjectName string // Project name for branding
-	IsSecure    bool   // Whether running in secure mode
-	GitHubRepo  string // GitHub repo for client downloads (e.g., "username/gopublic")
+	Registry            *server.TunnelRegistry
+	DashHandler         *dashboard.Handler
+	Port                string
+	RootDomain          string // Root domain for routing
+	ProjectName         string // Project name for branding
+	IsSecure            bool   // Whether running in secure mode
+	GitHubRepo          string // GitHub repo for client downloads (e.g., "username/gopublic")
+	DailyBandwidthLimit int64  // Daily bandwidth limit per user in bytes (0 = unlimited)
 }
 
 // NewIngressWithConfig creates a new ingress with the given configuration.
 func NewIngressWithConfig(cfg *config.Config, registry *server.TunnelRegistry, dash *dashboard.Handler) *Ingress {
 	return &Ingress{
-		Registry:    registry,
-		DashHandler: dash,
-		Port:        cfg.IngressPort(),
-		RootDomain:  cfg.Domain,
-		ProjectName: cfg.ProjectName,
-		IsSecure:    cfg.IsSecure(),
-		GitHubRepo:  cfg.GitHubRepo,
+		Registry:            registry,
+		DashHandler:         dash,
+		Port:                cfg.IngressPort(),
+		RootDomain:          cfg.Domain,
+		ProjectName:         cfg.ProjectName,
+		IsSecure:            cfg.IsSecure(),
+		GitHubRepo:          cfg.GitHubRepo,
+		DailyBandwidthLimit: cfg.DailyBandwidthLimit,
 	}
 }
 
@@ -217,6 +221,14 @@ func (i *Ingress) serveLandingPage(c *gin.Context) {
 		i.serveInstallSh(c)
 	case "/install.ps1":
 		i.serveInstallPs1(c)
+	case "/terms":
+		i.DashHandler.Terms(c)
+	case "/abuse":
+		if c.Request.Method == http.MethodPost {
+			i.DashHandler.SubmitAbuseReport(c)
+		} else {
+			i.DashHandler.AbuseForm(c)
+		}
 	default:
 		scheme := "http"
 		if i.IsSecure {
@@ -347,12 +359,34 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 		i.DashHandler.TelegramCallback(c)
 	case "/logout":
 		i.DashHandler.Logout(c)
+	case "/terms":
+		i.DashHandler.Terms(c)
+	case "/abuse":
+		if c.Request.Method == http.MethodPost {
+			i.DashHandler.SubmitAbuseReport(c)
+		} else {
+			i.DashHandler.AbuseForm(c)
+		}
 	case "/api/regenerate-token":
 		if c.Request.Method == http.MethodPost {
 			i.DashHandler.RegenerateToken(c)
 		} else {
 			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
 		}
+	case "/api/accept-terms":
+		if c.Request.Method == http.MethodPost {
+			i.DashHandler.AcceptTerms(c)
+		} else {
+			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
+		}
+	case "/auth/yandex":
+		i.DashHandler.YandexAuth(c)
+	case "/auth/yandex/callback":
+		i.DashHandler.YandexCallback(c)
+	case "/link/telegram":
+		i.DashHandler.LinkTelegram(c)
+	case "/auth/telegram/link":
+		i.DashHandler.TelegramLinkCallback(c)
 	default:
 		c.String(http.StatusNotFound, "Not Found")
 	}
@@ -360,15 +394,28 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 
 // proxyToTunnel forwards the request to a tunnel client.
 func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
-	// Look up session
-	session, ok := i.Registry.GetSession(host)
+	// Look up tunnel entry (includes user ID)
+	entry, ok := i.Registry.GetEntry(host)
 	if !ok {
 		c.String(http.StatusNotFound, "Tunnel not found for host: %s", host)
 		return
 	}
 
+	// Check bandwidth limit before proxying
+	if i.DailyBandwidthLimit > 0 {
+		bytesUsed, err := storage.GetUserBandwidthToday(entry.UserID)
+		if err != nil {
+			log.Printf("Failed to check bandwidth for user %d: %v", entry.UserID, err)
+			// Continue anyway - don't block on DB errors
+		} else if bytesUsed >= i.DailyBandwidthLimit {
+			c.Header("Retry-After", "86400") // 24 hours
+			c.String(http.StatusTooManyRequests, "Daily bandwidth limit exceeded. Please try again tomorrow.")
+			return
+		}
+	}
+
 	// Open stream to tunnel client
-	stream, err := session.Open()
+	stream, err := entry.Session.Open()
 	if err != nil {
 		log.Printf("Failed to open stream for host %s: %v", host, err)
 		c.String(http.StatusBadGateway, "Failed to connect to tunnel client")
@@ -376,8 +423,17 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	}
 	defer stream.Close()
 
-	// Forward request
-	if err := c.Request.Write(stream); err != nil {
+	// Capture request size
+	var reqBuf bytes.Buffer
+	if err := c.Request.Write(&reqBuf); err != nil {
+		log.Printf("Failed to serialize request: %v", err)
+		c.Status(http.StatusBadGateway)
+		return
+	}
+	requestBytes := int64(reqBuf.Len())
+
+	// Forward request to tunnel
+	if _, err := stream.Write(reqBuf.Bytes()); err != nil {
 		log.Printf("Failed to write request to stream: %v", err)
 		c.Status(http.StatusBadGateway)
 		return
@@ -399,7 +455,17 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 		}
 	}
 
-	// Write status and body
+	// Write status and body, counting response bytes
 	c.Status(resp.StatusCode)
-	io.Copy(c.Writer, resp.Body)
+	responseBytes, _ := io.Copy(c.Writer, resp.Body)
+
+	// Record bandwidth usage asynchronously
+	totalBytes := requestBytes + responseBytes
+	if i.DailyBandwidthLimit > 0 && totalBytes > 0 {
+		go func(userID uint, bytes int64) {
+			if err := storage.AddUserBandwidth(userID, bytes); err != nil {
+				log.Printf("Failed to record bandwidth for user %d: %v", userID, err)
+			}
+		}(entry.UserID, totalBytes)
+	}
 }

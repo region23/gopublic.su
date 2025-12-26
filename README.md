@@ -7,19 +7,58 @@ GoPublic is a self-hosted reverse proxy service (similar to ngrok) that allows y
 You can configure the server using **Environment Variables** or a **`.env`** file placed in the same directory as the server binary.
 For a deep dive into how the system works, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
+Copy `.env.example` to `.env` and configure the required values.
+
+### Core Settings
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DOMAIN_NAME` | The root domain for your server (e.g. `example.com`). If set, enables **HTTPS** mode. | *empty* (HTTP mode) |
-| `PROJECT_NAME` | Project name displayed on the landing page and branding. | `Go Public` |
-| `EMAIL` | Email address for Let's Encrypt registration (required if `DOMAIN_NAME` is set). | *empty* |
+| `DOMAIN_NAME` | Root domain for your server (e.g. `tunnel.example.com`). Enables HTTPS if set. | *empty* (HTTP) |
+| `PROJECT_NAME` | Project name for branding on landing page. | `Go Public` |
+| `EMAIL` | Email for Let's Encrypt registration (required if `DOMAIN_NAME` is set). | *empty* |
+| `INSECURE_HTTP` | Set to `true` to use HTTP instead of HTTPS (for local dev). | `false` |
+| `DB_PATH` | Path to SQLite database file. | `gopublic.db` |
+| `CONTROL_PLANE_PORT` | Port for tunnel control plane connections. | `:4443` |
+
+### User Limits
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DOMAINS_PER_USER` | Number of random domains assigned to each new user. | `2` |
+| `DAILY_BANDWIDTH_LIMIT_MB` | Daily bandwidth limit per user in MB (0 = unlimited). | `100` |
+
+### Authentication
+
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `TELEGRAM_BOT_TOKEN` | Token from @BotFather for Telegram Login. | *empty* |
-| `TELEGRAM_BOT_NAME` | Username of your bot (e.g. `MyGopublicBot`) used in the login widget. | *empty* |
+| `TELEGRAM_BOT_NAME` | Username of your Telegram bot (without @). | *empty* |
+| `YANDEX_CLIENT_ID` | Yandex OAuth client ID (register at oauth.yandex.com). | *empty* |
+| `YANDEX_CLIENT_SECRET` | Yandex OAuth client secret. | *empty* |
+
+### Notifications & Security
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ADMIN_TELEGRAM_ID` | Telegram user ID for receiving abuse reports. | *empty* |
+| `SESSION_HASH_KEY` | 32-byte hex key for cookie signing. | *random in dev* |
+| `SESSION_BLOCK_KEY` | 32-byte hex key for cookie encryption. | *random in dev* |
+
+### Optional
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GITHUB_REPO` | GitHub repository for client downloads (e.g. `username/gopublic`). | *empty* |
 
 **Example `.env` file:**
 ```ini
 DOMAIN_NAME=tunnel.mysite.com
 PROJECT_NAME=My Tunnel
 EMAIL=admin@mysite.com
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM_BOT_NAME=MyTunnelBot
+DOMAINS_PER_USER=3
+DAILY_BANDWIDTH_LIMIT_MB=500
 ```
 
 ## VPS Deployment

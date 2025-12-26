@@ -25,11 +25,21 @@ type Config struct {
 	TelegramBotToken string
 	TelegramBotName  string
 
+	// Yandex OAuth
+	YandexClientID     string
+	YandexClientSecret string
+
+	// Admin notifications
+	AdminTelegramID int64 // Telegram user ID for abuse reports
+
 	// GitHub repository for client downloads (e.g., "username/gopublic")
 	GitHubRepo string
 
 	// Number of domains to assign per new user (default: 2)
 	DomainsPerUser int
+
+	// Daily bandwidth limit per user in bytes (0 = unlimited)
+	DailyBandwidthLimit int64
 
 	// Session keys (32 bytes each)
 	SessionHashKey  []byte
@@ -53,18 +63,38 @@ func LoadFromEnv() (*Config, error) {
 		}
 	}
 
+	// Parse daily bandwidth limit (default: 100MB)
+	dailyBandwidthLimit := int64(100 * 1024 * 1024) // 100MB in bytes
+	if val := os.Getenv("DAILY_BANDWIDTH_LIMIT_MB"); val != "" {
+		if n, err := strconv.ParseInt(val, 10, 64); err == nil && n >= 0 {
+			dailyBandwidthLimit = n * 1024 * 1024 // Convert MB to bytes
+		}
+	}
+
+	// Parse admin Telegram ID
+	var adminTelegramID int64
+	if val := os.Getenv("ADMIN_TELEGRAM_ID"); val != "" {
+		if n, err := strconv.ParseInt(val, 10, 64); err == nil {
+			adminTelegramID = n
+		}
+	}
+
 	cfg := &Config{
-		Domain:           os.Getenv("DOMAIN_NAME"),
-		ProjectName:      getEnvOrDefault("PROJECT_NAME", "Go Public"),
-		Email:            os.Getenv("EMAIL"),
-		InsecureMode:     os.Getenv("INSECURE_HTTP") == "true",
-		DBPath:           getEnvOrDefault("DB_PATH", "gopublic.db"),
-		ControlPlanePort: getEnvOrDefault("CONTROL_PLANE_PORT", ":4443"),
-		MaxConnections:   1000,
-		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramBotName:  os.Getenv("TELEGRAM_BOT_NAME"),
-		GitHubRepo:       os.Getenv("GITHUB_REPO"),
-		DomainsPerUser:   domainsPerUser,
+		Domain:              os.Getenv("DOMAIN_NAME"),
+		ProjectName:         getEnvOrDefault("PROJECT_NAME", "Go Public"),
+		Email:               os.Getenv("EMAIL"),
+		InsecureMode:        os.Getenv("INSECURE_HTTP") == "true",
+		DBPath:              getEnvOrDefault("DB_PATH", "gopublic.db"),
+		ControlPlanePort:    getEnvOrDefault("CONTROL_PLANE_PORT", ":4443"),
+		MaxConnections:      1000,
+		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotName:     os.Getenv("TELEGRAM_BOT_NAME"),
+		YandexClientID:      os.Getenv("YANDEX_CLIENT_ID"),
+		YandexClientSecret:  os.Getenv("YANDEX_CLIENT_SECRET"),
+		AdminTelegramID:     adminTelegramID,
+		GitHubRepo:          os.Getenv("GITHUB_REPO"),
+		DomainsPerUser:      domainsPerUser,
+		DailyBandwidthLimit: dailyBandwidthLimit,
 	}
 
 	// Parse session keys
@@ -126,6 +156,21 @@ func (c *Config) IngressPort() string {
 // AllowInsecureSessionKeys returns true if random session keys are allowed
 func (c *Config) AllowInsecureSessionKeys() bool {
 	return c.InsecureMode || c.IsLocalDev()
+}
+
+// HasYandexOAuth returns true if Yandex OAuth is configured
+func (c *Config) HasYandexOAuth() bool {
+	return c.YandexClientID != "" && c.YandexClientSecret != ""
+}
+
+// HasTelegramOAuth returns true if Telegram OAuth is configured
+func (c *Config) HasTelegramOAuth() bool {
+	return c.TelegramBotToken != "" && c.TelegramBotName != ""
+}
+
+// HasAdminNotifications returns true if admin Telegram notifications are configured
+func (c *Config) HasAdminNotifications() bool {
+	return c.AdminTelegramID != 0 && c.TelegramBotToken != ""
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

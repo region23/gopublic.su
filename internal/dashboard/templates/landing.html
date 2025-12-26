@@ -594,12 +594,14 @@
 
     <footer>
         <div class="footer-content">
-            <span class="footer-text">{{.ProjectName}}</span>
+            <a href="https://makeitbeta.ru" target="_blank" rel="noopener noreferrer" class="footer-text footer-link">Разработано в Make It Beta</a>
             <span class="footer-separator"></span>
+            <a href="/terms" class="footer-text footer-link">Условия использования</a>
+            <span class="footer-separator"></span>
+            <a href="/abuse" class="footer-text footer-link">Сообщить о нарушении</a>
             {{if .GitHubRepo}}
+            <span class="footer-separator"></span>
             <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-text footer-link">{{.Version}}</a>
-            {{else}}
-            <span class="footer-text">{{.Version}}</span>
             {{end}}
         </div>
     </footer>

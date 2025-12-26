@@ -150,7 +150,14 @@
             border-radius: 50%;
         }
 
-        /* Telegram Widget Container */
+        /* Auth Buttons */
+        .auth-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+
         .auth-widget {
             display: flex;
             justify-content: center;
@@ -159,6 +166,59 @@
 
         .auth-widget iframe {
             border-radius: 4px;
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-light);
+        }
+
+        .yandex-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
+            max-width: 250px;
+            padding: 0.875rem 1.5rem;
+            background: #fc3f1d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-family: var(--font-primary);
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .yandex-btn:hover {
+            background: #e53617;
+        }
+
+        .yandex-btn:active {
+            transform: scale(0.98);
+        }
+
+        .yandex-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
         }
 
         /* Footer */
@@ -246,22 +306,45 @@
                 </div>
             </div>
 
-            <div class="auth-widget">
-                <script async src="https://telegram.org/js/telegram-widget.js?22"
-                        data-telegram-login="{{.BotName}}"
-                        data-size="large"
-                        data-auth-url="{{.AuthURL}}"
-                        data-request-access="write"></script>
+            <div class="auth-buttons">
+                {{if .BotName}}
+                <div class="auth-widget">
+                    <script async src="https://telegram.org/js/telegram-widget.js?22"
+                            data-telegram-login="{{.BotName}}"
+                            data-size="large"
+                            data-auth-url="{{.AuthURL}}"
+                            data-request-access="write"></script>
+                </div>
+                {{end}}
+
+                {{if .YandexEnabled}}
+                {{if .BotName}}<div class="auth-divider">или</div>{{end}}
+                <a href="/auth/yandex" class="yandex-btn">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="white"/>
+                        <path d="M13.3197 18.7368H15.3281V5.26318H12.1377C8.92298 5.26318 7.13928 7.04556 7.13928 9.57899C7.13928 11.7368 8.15385 12.9474 9.95754 14.2105L7 18.7368H9.19751L12.5771 13.5789L11.3639 12.6316C9.88219 11.5263 9.12304 10.7368 9.12304 9.36843C9.12304 7.94738 10.1877 6.94738 12.1627 6.94738H13.3197V18.7368Z" fill="#FC3F1D"/>
+                    </svg>
+                    Войти через Яндекс
+                </a>
+                {{end}}
+
+                {{if and (not .BotName) (not .YandexEnabled)}}
+                <p style="color: var(--text-muted); text-align: center;">
+                    Авторизация не настроена. Обратитесь к администратору.
+                </p>
+                {{end}}
             </div>
         </div>
 
         <footer class="login-footer">
-            <span class="footer-text">GoPublic</span>
+            <a href="https://makeitbeta.ru" target="_blank" rel="noopener noreferrer" class="footer-link">Разработано в Make It Beta</a>
             <span class="footer-separator"></span>
+            <a href="/terms" class="footer-link">Условия использования</a>
+            <span class="footer-separator"></span>
+            <a href="/abuse" class="footer-link">Сообщить о нарушении</a>
             {{if .GitHubRepo}}
+            <span class="footer-separator"></span>
             <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
-            {{else}}
-            <span class="footer-text">{{.Version}}</span>
             {{end}}
         </footer>
     </div>

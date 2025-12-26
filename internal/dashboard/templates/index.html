@@ -506,6 +506,88 @@
             color: var(--lumon-teal);
         }
 
+        /* Linked Accounts */
+        .linked-accounts {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .account-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 1rem;
+            background: var(--bg-paper);
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+        }
+
+        .account-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .account-icon svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .account-icon.telegram {
+            background: #229ED9;
+            color: white;
+        }
+
+        .account-icon.yandex {
+            background: transparent;
+        }
+
+        .account-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+        }
+
+        .account-name {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.9375rem;
+        }
+
+        .account-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .account-status.linked {
+            color: #4a7c59;
+        }
+
+        .link-btn {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--lumon-teal);
+            border-radius: 4px;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+        }
+
+        .link-btn:hover {
+            background: var(--lumon-teal);
+            color: white;
+        }
+
         /* Download Section */
         .download-grid {
             display: grid;
@@ -803,6 +885,58 @@
 
         <section class="card">
             <div class="card-header">
+                <div class="card-label">Привязанные аккаунты</div>
+            </div>
+            <div class="card-body">
+                <div class="linked-accounts">
+                    <div class="account-item">
+                        <div class="account-icon telegram">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                            </svg>
+                        </div>
+                        <div class="account-info">
+                            <span class="account-name">Telegram</span>
+                            {{if .User.TelegramID}}
+                            <span class="account-status linked">Привязан</span>
+                            {{else}}
+                            <span class="account-status">Не привязан</span>
+                            {{end}}
+                        </div>
+                        {{if not .User.TelegramID}}
+                        {{if .TelegramEnabled}}
+                        <a href="/link/telegram" class="link-btn">Привязать</a>
+                        {{end}}
+                        {{end}}
+                    </div>
+
+                    <div class="account-item">
+                        <div class="account-icon yandex">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                                <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="#fc3f1d"/>
+                                <path d="M13.3197 18.7368H15.3281V5.26318H12.1377C8.92298 5.26318 7.13928 7.04556 7.13928 9.57899C7.13928 11.7368 8.15385 12.9474 9.95754 14.2105L7 18.7368H9.19751L12.5771 13.5789L11.3639 12.6316C9.88219 11.5263 9.12304 10.7368 9.12304 9.36843C9.12304 7.94738 10.1877 6.94738 12.1627 6.94738H13.3197V18.7368Z" fill="white"/>
+                            </svg>
+                        </div>
+                        <div class="account-info">
+                            <span class="account-name">Яндекс</span>
+                            {{if .User.YandexID}}
+                            <span class="account-status linked">Привязан</span>
+                            {{else}}
+                            <span class="account-status">Не привязан</span>
+                            {{end}}
+                        </div>
+                        {{if not .User.YandexID}}
+                        {{if .YandexEnabled}}
+                        <a href="/auth/yandex" class="link-btn">Привязать</a>
+                        {{end}}
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
                 <div class="card-label">Назначенные домены</div>
             </div>
             <div class="card-body">
@@ -860,12 +994,14 @@ tunnels:
 
     <footer class="footer">
         <div class="footer-content">
-            <span class="footer-text">GoPublic</span>
+            <a href="https://makeitbeta.ru" target="_blank" rel="noopener noreferrer" class="footer-link">Разработано в Make It Beta</a>
             <span class="footer-separator"></span>
+            <a href="/terms" class="footer-link">Условия использования</a>
+            <span class="footer-separator"></span>
+            <a href="/abuse" class="footer-link">Сообщить о нарушении</a>
             {{if .GitHubRepo}}
+            <span class="footer-separator"></span>
             <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
-            {{else}}
-            <span class="footer-text">{{.Version}}</span>
             {{end}}
         </div>
     </footer>
@@ -952,6 +1088,161 @@ tunnels:
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* Terms Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 26, 46, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .modal-header h2 {
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: var(--lumon-teal);
+            margin: 0;
+        }
+
+        .modal-body {
+            padding: 1.5rem 2rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .modal-body ul {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal-body li {
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--border-light);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        .btn-accept {
+            padding: 0.75rem 2rem;
+            font-family: var(--font-primary);
+            font-size: 1rem;
+            font-weight: 500;
+            color: white;
+            background: linear-gradient(135deg, var(--lumon-teal), var(--lumon-teal-light));
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-accept:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(13, 115, 119, 0.3);
+        }
+
+        .btn-accept:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
     </style>
+
+    {{if not .TermsAccepted}}
+    <div id="terms-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Условия использования</h2>
+            </div>
+            <div class="modal-body">
+                <p>Для продолжения работы с сервисом необходимо принять условия использования.</p>
+
+                <p><strong>При использовании GoPublic запрещается:</strong></p>
+                <ul>
+                    <li>Распространение вредоносного ПО (вирусы, трояны, шпионские программы)</li>
+                    <li>Фишинг и мошенничество (поддельные страницы для кражи данных)</li>
+                    <li>Спам и массовые рассылки</li>
+                    <li>Размещение нелегального контента</li>
+                    <li>DDoS-атаки и обход блокировок</li>
+                </ul>
+
+                <p>Нарушение данных правил влечёт немедленную блокировку аккаунта без предупреждения.</p>
+
+                <p>Полный текст условий доступен на странице <a href="/terms" target="_blank" style="color: var(--lumon-teal);">Условия использования</a>.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-accept" id="accept-terms-btn" onclick="acceptTerms()">
+                    Принимаю условия
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function acceptTerms() {
+            const btn = document.getElementById('accept-terms-btn');
+            btn.disabled = true;
+            btn.textContent = 'Сохранение...';
+
+            fetch('/api/accept-terms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Server error');
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('terms-modal').classList.add('hidden');
+            })
+            .catch(err => {
+                alert('Ошибка: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = 'Принимаю условия';
+            });
+        }
+    </script>
+    {{end}}
 </body>
 </html>

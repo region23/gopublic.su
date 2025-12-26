@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Условия использования — GoPublic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --lumon-teal: #0d7377;
+            --lumon-teal-light: #14919b;
+            --lumon-mint: #a8dadc;
+            --lumon-mint-pale: #d4ecec;
+            --bg-cream: #f5f5dc;
+            --bg-paper: #faf9f6;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a5a;
+            --text-muted: #7a7a8a;
+            --border-light: #d1d5db;
+            --shadow-soft: 0 2px 8px rgba(13, 115, 119, 0.08);
+            --shadow-card: 0 8px 32px rgba(26, 26, 46, 0.08);
+            --font-primary: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background-color: var(--bg-cream);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+            flex: 1;
+        }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .brand-icon {
+            width: 12px;
+            height: 12px;
+            background: linear-gradient(135deg, var(--lumon-teal), var(--lumon-teal-light));
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+
+        .brand-name {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--lumon-teal);
+            text-decoration: none;
+        }
+
+        .content-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            box-shadow: var(--shadow-card);
+            padding: 3rem;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 500;
+            color: var(--lumon-teal);
+            margin-bottom: 0.5rem;
+        }
+
+        .last-updated {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        ul {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+
+        .warning-title {
+            font-weight: 600;
+            color: #856404;
+            margin-bottom: 0.5rem;
+        }
+
+        .warning p {
+            color: #856404;
+            margin-bottom: 0;
+        }
+
+        footer {
+            background: var(--bg-paper);
+            border-top: 1px solid var(--border-light);
+            padding: 1.5rem 2rem;
+            text-align: center;
+        }
+
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+            color: var(--lumon-teal);
+        }
+
+        .footer-separator {
+            color: var(--border-light);
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 2rem 1rem;
+            }
+
+            .content-card {
+                padding: 2rem 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brand">
+            <a href="/" class="brand-mark" style="text-decoration: none;">
+                <div class="brand-icon"></div>
+                <span class="brand-name">GoPublic</span>
+            </a>
+        </div>
+
+        <div class="content-card">
+            <h1>Условия использования</h1>
+            <p class="last-updated">Последнее обновление: {{.LastUpdated}}</p>
+
+            <p>Используя сервис GoPublic, вы соглашаетесь с настоящими условиями использования. Пожалуйста, внимательно прочитайте их перед использованием сервиса.</p>
+
+            <h2>1. Описание сервиса</h2>
+            <p>GoPublic предоставляет услуги туннелирования, позволяющие временно открыть доступ к локальным сервисам через публичный интернет. Сервис предназначен для разработки, тестирования и демонстрации приложений.</p>
+
+            <h2>2. Запрещённое использование</h2>
+            <p>При использовании GoPublic строго запрещается:</p>
+            <ul>
+                <li><strong>Распространение вредоносного ПО</strong> — размещение вирусов, троянов, шпионских программ и любого другого вредоносного кода</li>
+                <li><strong>Фишинг и мошенничество</strong> — создание поддельных страниц для кражи учётных данных, финансовой информации или персональных данных</li>
+                <li><strong>Спам и массовые рассылки</strong> — использование туннелей для рассылки нежелательных сообщений</li>
+                <li><strong>Нелегальный контент</strong> — размещение материалов, нарушающих законодательство РФ</li>
+                <li><strong>DDoS-атаки</strong> — использование сервиса для организации или участия в атаках на отказ в обслуживании</li>
+                <li><strong>Обход блокировок</strong> — использование сервиса для обхода законных ограничений доступа</li>
+            </ul>
+
+            <div class="warning">
+                <div class="warning-title">Важно</div>
+                <p>Нарушение данных правил влечёт немедленную блокировку аккаунта без предупреждения и возможность передачи информации в правоохранительные органы.</p>
+            </div>
+
+            <h2>3. Ограничения сервиса</h2>
+            <p>Бесплатный тариф включает следующие ограничения:</p>
+            <ul>
+                <li>Лимит трафика: {{.DailyBandwidthLimitMB}} МБ в день</li>
+                <li>Количество доменов: {{.DomainsPerUser}} на пользователя</li>
+                <li>Одно активное подключение на аккаунт</li>
+            </ul>
+            <p>Мы оставляем за собой право изменять лимиты без предварительного уведомления.</p>
+
+            <h2>4. Конфиденциальность</h2>
+            <p>Мы храним минимально необходимую информацию для работы сервиса:</p>
+            <ul>
+                <li>Идентификатор аккаунта (Telegram ID / Yandex ID)</li>
+                <li>Статистику использования (объём трафика, время подключений)</li>
+                <li>Логи для обеспечения безопасности</li>
+            </ul>
+            <p>Мы не передаём персональные данные третьим лицам, за исключением случаев, предусмотренных законодательством.</p>
+
+            <h2>5. Ответственность</h2>
+            <p>Сервис предоставляется «как есть» без каких-либо гарантий. Мы не несём ответственности за:</p>
+            <ul>
+                <li>Перебои в работе сервиса</li>
+                <li>Потерю данных</li>
+                <li>Ущерб, причинённый использованием сервиса</li>
+            </ul>
+            <p>Вы используете сервис на свой страх и риск и несёте полную ответственность за контент, размещаемый через туннели.</p>
+
+            <h2>6. Изменение условий</h2>
+            <p>Мы оставляем за собой право изменять настоящие условия в любое время. Продолжая использовать сервис после изменения условий, вы соглашаетесь с новой редакцией.</p>
+
+            <h2>7. Контакты</h2>
+            <p>По вопросам, связанным с использованием сервиса, обращайтесь через <a href="/abuse" style="color: var(--lumon-teal);">форму обратной связи</a>.</p>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <a href="https://makeitbeta.ru" target="_blank" rel="noopener noreferrer" class="footer-link">Разработано в Make It Beta</a>
+            <span class="footer-separator">|</span>
+            <a href="/terms" class="footer-link">Условия использования</a>
+            <span class="footer-separator">|</span>
+            <a href="/abuse" class="footer-link">Сообщить о нарушении</a>
+            {{if .GitHubRepo}}
+            <span class="footer-separator">|</span>
+            <a href="https://github.com/{{.GitHubRepo}}/releases" target="_blank" rel="noopener noreferrer" class="footer-link">{{.Version}}</a>
+            {{end}}
+        </div>
+    </footer>
+</body>
+</html>

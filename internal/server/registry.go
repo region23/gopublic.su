@@ -6,23 +6,32 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
+// TunnelEntry contains session and user info for a registered tunnel
+type TunnelEntry struct {
+	Session *yamux.Session
+	UserID  uint
+}
+
 // TunnelRegistry manages the mapping between hostnames and active Yamux sessions.
 type TunnelRegistry struct {
 	mu       sync.RWMutex
-	sessions map[string]*yamux.Session
+	sessions map[string]*TunnelEntry
 }
 
 func NewTunnelRegistry() *TunnelRegistry {
 	return &TunnelRegistry{
-		sessions: make(map[string]*yamux.Session),
+		sessions: make(map[string]*TunnelEntry),
 	}
 }
 
-// Register maps a hostname to a session.
-func (r *TunnelRegistry) Register(hostname string, session *yamux.Session) {
+// Register maps a hostname to a session with user ID.
+func (r *TunnelRegistry) Register(hostname string, session *yamux.Session, userID uint) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.sessions[hostname] = session
+	r.sessions[hostname] = &TunnelEntry{
+		Session: session,
+		UserID:  userID,
+	}
 }
 
 // Unregister removes a mapping.
@@ -32,10 +41,21 @@ func (r *TunnelRegistry) Unregister(hostname string) {
 	delete(r.sessions, hostname)
 }
 
-// GetSession returns the session for a given hostname.
+// GetSession returns the session for a given hostname (for backward compatibility).
 func (r *TunnelRegistry) GetSession(hostname string) (*yamux.Session, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	sess, ok := r.sessions[hostname]
-	return sess, ok
+	entry, ok := r.sessions[hostname]
+	if !ok {
+		return nil, false
+	}
+	return entry.Session, true
+}
+
+// GetEntry returns the full tunnel entry for a given hostname.
+func (r *TunnelRegistry) GetEntry(hostname string) (*TunnelEntry, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.sessions[hostname]
+	return entry, ok
 }

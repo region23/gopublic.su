@@ -13,8 +13,8 @@ func TestTunnelRegistry_RegisterUnregister(t *testing.T) {
 	// Use nil session for basic registry operations
 	var session *yamux.Session = nil
 
-	// Register
-	registry.Register("test.example.com", session)
+	// Register with userID
+	registry.Register("test.example.com", session, 1)
 
 	// Verify registered
 	got, ok := registry.GetSession("test.example.com")
@@ -47,7 +47,7 @@ func TestTunnelRegistry_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			domain := "test" + string(rune('0'+id%10)) + ".example.com"
-			registry.Register(domain, nil)
+			registry.Register(domain, nil, uint(id%10+1))
 		}(i)
 	}
 
@@ -89,8 +89,8 @@ func TestTunnelRegistry_MultipleHosts(t *testing.T) {
 	hosts := []string{"a.example.com", "b.example.com", "c.example.com"}
 
 	// Register all
-	for _, host := range hosts {
-		registry.Register(host, nil)
+	for i, host := range hosts {
+		registry.Register(host, nil, uint(i+1))
 	}
 
 	// Verify all registered

@@ -356,7 +356,7 @@ func (s *Server) bindDomains(session *yamux.Session, userID uint, requestedDomai
 			regName = name + "." + s.RootDomain
 		}
 
-		s.Registry.Register(regName, session)
+		s.Registry.Register(regName, session, userID)
 		boundDomains = append(boundDomains, regName)
 		log.Printf("Successfully bound domain %s for user %d", regName, userID)
 	}

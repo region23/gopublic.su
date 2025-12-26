@@ -1,14 +1,20 @@
 package dashboard
 
 import (
+	"bytes"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -27,12 +33,16 @@ import (
 var templateFS embed.FS
 
 type Handler struct {
-	BotToken       string
-	BotName        string
-	Domain         string
-	GitHubRepo     string
-	DomainsPerUser int
-	Session        *auth.SessionManager
+	BotToken            string
+	BotName             string
+	Domain              string
+	GitHubRepo          string
+	DomainsPerUser      int
+	DailyBandwidthMB    int
+	AdminTelegramID     int64
+	YandexClientID      string
+	YandexClientSecret  string
+	Session             *auth.SessionManager
 }
 
 // NewHandlerWithConfig creates a new dashboard handler with the given configuration.
@@ -48,12 +58,16 @@ func NewHandlerWithConfig(cfg *config.Config) (*Handler, error) {
 	}
 
 	return &Handler{
-		BotToken:       cfg.TelegramBotToken,
-		BotName:        cfg.TelegramBotName,
-		Domain:         cfg.Domain,
-		GitHubRepo:     cfg.GitHubRepo,
-		DomainsPerUser: cfg.DomainsPerUser,
-		Session:        sessionMgr,
+		BotToken:           cfg.TelegramBotToken,
+		BotName:            cfg.TelegramBotName,
+		Domain:             cfg.Domain,
+		GitHubRepo:         cfg.GitHubRepo,
+		DomainsPerUser:     cfg.DomainsPerUser,
+		DailyBandwidthMB:   int(cfg.DailyBandwidthLimit / (1024 * 1024)),
+		AdminTelegramID:    cfg.AdminTelegramID,
+		YandexClientID:     cfg.YandexClientID,
+		YandexClientSecret: cfg.YandexClientSecret,
+		Session:            sessionMgr,
 	}, nil
 }
 
@@ -124,10 +138,11 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "login.html", gin.H{
-		"BotName":    h.BotName,
-		"AuthURL":    authURL,
-		"GitHubRepo": h.GitHubRepo,
-		"Version":    version.Version,
+		"BotName":       h.BotName,
+		"AuthURL":       authURL,
+		"GitHubRepo":    h.GitHubRepo,
+		"Version":       version.Version,
+		"YandexEnabled": h.YandexClientID != "" && h.YandexClientSecret != "",
 	})
 }
 
@@ -155,12 +170,15 @@ func (h *Handler) Index(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"User":       user,
-		"Token":      token.TokenString,
-		"Domains":    domains,
-		"RootDomain": h.Domain,
-		"GitHubRepo": h.GitHubRepo,
-		"Version":    version.Version,
+		"User":            user,
+		"Token":           token.TokenString,
+		"Domains":         domains,
+		"RootDomain":      h.Domain,
+		"GitHubRepo":      h.GitHubRepo,
+		"Version":         version.Version,
+		"TermsAccepted":   user.TermsAcceptedAt != nil,
+		"TelegramEnabled": h.BotToken != "" && h.BotName != "",
+		"YandexEnabled":   h.YandexClientID != "" && h.YandexClientSecret != "",
 	})
 }
 
@@ -324,4 +342,463 @@ func (h *Handler) verifyTelegramHash(params map[string][]string) bool {
 	// Actually URL.Query() returns copy? No. But we don't need it anymore.
 
 	return calculatedHash == checkHash
+}
+
+// Terms displays the Terms of Service page
+func (h *Handler) Terms(c *gin.Context) {
+	c.HTML(http.StatusOK, "terms.html", gin.H{
+		"GitHubRepo":          h.GitHubRepo,
+		"Version":             version.Version,
+		"LastUpdated":         "26 декабря 2024",
+		"DailyBandwidthLimitMB": h.DailyBandwidthMB,
+		"DomainsPerUser":      h.DomainsPerUser,
+	})
+}
+
+// AcceptTerms handles the terms acceptance API
+func (h *Handler) AcceptTerms(c *gin.Context) {
+	// Validate CSRF
+	cookieToken, err := c.Cookie("csrf_token")
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token missing"})
+		return
+	}
+
+	requestToken := c.GetHeader("X-CSRF-Token")
+	if requestToken == "" || requestToken != cookieToken {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token invalid"})
+		return
+	}
+
+	// Validate session
+	user, err := h.getUserFromSession(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	if err := storage.AcceptTerms(user.ID); err != nil {
+		log.Printf("Failed to accept terms for user %d: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept terms"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// AbuseForm displays the abuse report form
+func (h *Handler) AbuseForm(c *gin.Context) {
+	c.HTML(http.StatusOK, "abuse.html", gin.H{
+		"GitHubRepo": h.GitHubRepo,
+		"Version":    version.Version,
+	})
+}
+
+// AbuseReportRequest represents the abuse report submission
+type AbuseReportRequest struct {
+	TunnelURL     string `json:"tunnel_url"`
+	ReportType    string `json:"report_type"`
+	Description   string `json:"description"`
+	ReporterEmail string `json:"reporter_email"`
+}
+
+// SubmitAbuseReport handles abuse report submissions
+func (h *Handler) SubmitAbuseReport(c *gin.Context) {
+	// Validate CSRF
+	cookieToken, err := c.Cookie("csrf_token")
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token missing"})
+		return
+	}
+
+	requestToken := c.GetHeader("X-CSRF-Token")
+	if requestToken == "" || requestToken != cookieToken {
+		c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token invalid"})
+		return
+	}
+
+	var req AbuseReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	// Validate required fields
+	if req.TunnelURL == "" || req.ReportType == "" || req.Description == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required fields"})
+		return
+	}
+
+	// Create abuse report
+	report := &models.AbuseReport{
+		TunnelURL:     req.TunnelURL,
+		ReportType:    req.ReportType,
+		Description:   req.Description,
+		ReporterEmail: req.ReporterEmail,
+		Status:        "pending",
+	}
+
+	if err := storage.CreateAbuseReport(report); err != nil {
+		log.Printf("Failed to create abuse report: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit report"})
+		return
+	}
+
+	// Send Telegram notification to admin
+	h.sendAbuseNotification(report)
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// sendAbuseNotification sends a Telegram message to the admin about the abuse report
+func (h *Handler) sendAbuseNotification(report *models.AbuseReport) {
+	if h.AdminTelegramID == 0 || h.BotToken == "" {
+		return
+	}
+
+	reportTypes := map[string]string{
+		"phishing": "Фишинг",
+		"malware":  "Вредоносное ПО",
+		"spam":     "Спам",
+		"illegal":  "Нелегальный контент",
+		"other":    "Другое",
+	}
+
+	reportTypeName := reportTypes[report.ReportType]
+	if reportTypeName == "" {
+		reportTypeName = report.ReportType
+	}
+
+	message := fmt.Sprintf(
+		"🚨 *Новая жалоба на нарушение*\n\n"+
+			"*URL:* %s\n"+
+			"*Тип:* %s\n"+
+			"*Описание:* %s",
+		report.TunnelURL,
+		reportTypeName,
+		report.Description,
+	)
+
+	if report.ReporterEmail != "" {
+		message += fmt.Sprintf("\n*Email:* %s", report.ReporterEmail)
+	}
+
+	// Send via Telegram Bot API
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.BotToken)
+
+	payload := map[string]interface{}{
+		"chat_id":    h.AdminTelegramID,
+		"text":       message,
+		"parse_mode": "Markdown",
+	}
+
+	go func() {
+		jsonData, _ := json.Marshal(payload)
+		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Failed to send Telegram notification: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+	}()
+}
+
+// YandexUserInfo represents user info from Yandex OAuth
+type YandexUserInfo struct {
+	ID           string `json:"id"`
+	Login        string `json:"login"`
+	DefaultEmail string `json:"default_email"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+}
+
+// getYandexRedirectURL returns the OAuth redirect URL based on domain
+func (h *Handler) getYandexRedirectURL() string {
+	if h.Domain == "localhost" || h.Domain == "127.0.0.1" {
+		return fmt.Sprintf("http://%s/auth/yandex/callback", h.Domain)
+	}
+	return fmt.Sprintf("https://app.%s/auth/yandex/callback", h.Domain)
+}
+
+// generateState generates a random state parameter for OAuth
+func generateState() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+// YandexAuth initiates Yandex OAuth flow
+func (h *Handler) YandexAuth(c *gin.Context) {
+	if h.YandexClientID == "" {
+		c.String(http.StatusNotFound, "Yandex OAuth not configured")
+		return
+	}
+
+	state := generateState()
+
+	// Store state in cookie for verification
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		Path:     "/",
+		MaxAge:   600, // 10 minutes
+		HttpOnly: true,
+		Secure:   h.Domain != "localhost" && h.Domain != "127.0.0.1",
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Build authorization URL
+	params := url.Values{}
+	params.Set("response_type", "code")
+	params.Set("client_id", h.YandexClientID)
+	params.Set("redirect_uri", h.getYandexRedirectURL())
+	params.Set("state", state)
+
+	authURL := "https://oauth.yandex.ru/authorize?" + params.Encode()
+	c.Redirect(http.StatusTemporaryRedirect, authURL)
+}
+
+// YandexCallback handles OAuth callback from Yandex
+func (h *Handler) YandexCallback(c *gin.Context) {
+	// Verify state
+	stateCookie, err := c.Cookie("oauth_state")
+	if err != nil {
+		c.String(http.StatusBadRequest, "Missing state cookie")
+		return
+	}
+
+	state := c.Query("state")
+	if state == "" || state != stateCookie {
+		c.String(http.StatusBadRequest, "Invalid state parameter")
+		return
+	}
+
+	// Clear state cookie
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:   "oauth_state",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	})
+
+	// Check for error
+	if errMsg := c.Query("error"); errMsg != "" {
+		log.Printf("Yandex OAuth error: %s - %s", errMsg, c.Query("error_description"))
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	code := c.Query("code")
+	if code == "" {
+		c.String(http.StatusBadRequest, "Missing authorization code")
+		return
+	}
+
+	// Exchange code for token
+	tokenData := url.Values{}
+	tokenData.Set("grant_type", "authorization_code")
+	tokenData.Set("code", code)
+	tokenData.Set("client_id", h.YandexClientID)
+	tokenData.Set("client_secret", h.YandexClientSecret)
+
+	tokenResp, err := http.PostForm("https://oauth.yandex.ru/token", tokenData)
+	if err != nil {
+		log.Printf("Failed to exchange code for token: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
+		return
+	}
+	defer tokenResp.Body.Close()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(tokenResp.Body)
+		log.Printf("Token exchange failed: %s", string(body))
+		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
+		return
+	}
+
+	var tokenResult struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+	}
+
+	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenResult); err != nil {
+		log.Printf("Failed to decode token response: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
+		return
+	}
+
+	// Get user info
+	userReq, _ := http.NewRequest("GET", "https://login.yandex.ru/info", nil)
+	userReq.Header.Set("Authorization", "OAuth "+tokenResult.AccessToken)
+
+	userResp, err := http.DefaultClient.Do(userReq)
+	if err != nil {
+		log.Printf("Failed to get user info: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to get user info from Yandex")
+		return
+	}
+	defer userResp.Body.Close()
+
+	var yandexUser YandexUserInfo
+	if err := json.NewDecoder(userResp.Body).Decode(&yandexUser); err != nil {
+		log.Printf("Failed to decode user info: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to get user info from Yandex")
+		return
+	}
+
+	// Check if user is already logged in (linking account)
+	if existingUser, err := h.getUserFromSession(c); err == nil {
+		// User is logged in - link Yandex account to existing user
+		if err := storage.LinkYandexAccount(existingUser.ID, yandexUser.ID); err != nil {
+			log.Printf("Failed to link Yandex account: %v", err)
+			c.String(http.StatusInternalServerError, "Failed to link Yandex account")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, "/")
+		return
+	}
+
+	// Try to find existing user by Yandex ID
+	user, err := storage.GetUserByYandexID(yandexUser.ID)
+
+	if err == storage.ErrNotFound {
+		// Create new user with token and domains
+		newUser := &models.User{
+			YandexID:  yandexUser.ID,
+			Email:     yandexUser.DefaultEmail,
+			FirstName: yandexUser.FirstName,
+			LastName:  yandexUser.LastName,
+			Username:  yandexUser.Login,
+		}
+
+		// Generate domain names
+		prefixes := []string{"misty", "silent", "bold", "rapid", "cool"}
+		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
+		var domains []string
+		for i := 0; i < h.DomainsPerUser; i++ {
+			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			domains = append(domains, name)
+		}
+
+		reg := storage.UserRegistration{
+			User:    newUser,
+			Domains: domains,
+		}
+
+		createdUser, _, err := storage.CreateUserWithTokenAndDomains(reg)
+		if err != nil {
+			log.Printf("Failed to create user: %v", err)
+			c.String(http.StatusInternalServerError, "Failed to create user account")
+			return
+		}
+		user = createdUser
+	} else if err != nil {
+		log.Printf("Database error looking up user: %v", err)
+		c.String(http.StatusInternalServerError, "Database error")
+		return
+	} else {
+		// Update existing user info
+		user.FirstName = yandexUser.FirstName
+		user.LastName = yandexUser.LastName
+		user.Username = yandexUser.Login
+		if yandexUser.DefaultEmail != "" {
+			user.Email = yandexUser.DefaultEmail
+		}
+		if err := storage.UpdateUser(user); err != nil {
+			log.Printf("Failed to update user: %v", err)
+			c.String(http.StatusInternalServerError, "Failed to update user")
+			return
+		}
+	}
+
+	// Set session
+	if err := h.Session.SetSession(c.Writer, user.ID); err != nil {
+		log.Printf("Failed to set session: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to create session")
+		return
+	}
+
+	c.Redirect(http.StatusTemporaryRedirect, "/")
+}
+
+// LinkTelegram initiates Telegram account linking for logged-in user
+func (h *Handler) LinkTelegram(c *gin.Context) {
+	user, err := h.getUserFromSession(c)
+	if err != nil {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	// If user already has Telegram linked, redirect to index
+	if user.TelegramID != 0 {
+		c.Redirect(http.StatusTemporaryRedirect, "/")
+		return
+	}
+
+	var authURL string
+	if h.Domain == "localhost" || h.Domain == "127.0.0.1" {
+		authURL = fmt.Sprintf("http://%s/auth/telegram/link", h.Domain)
+	} else {
+		authURL = fmt.Sprintf("https://app.%s/auth/telegram/link", h.Domain)
+	}
+
+	c.HTML(http.StatusOK, "link_telegram.html", gin.H{
+		"BotName":    h.BotName,
+		"AuthURL":    authURL,
+		"GitHubRepo": h.GitHubRepo,
+		"Version":    version.Version,
+		"User":       user,
+	})
+}
+
+// TelegramLinkCallback handles Telegram OAuth callback for account linking
+func (h *Handler) TelegramLinkCallback(c *gin.Context) {
+	// Verify user is logged in
+	user, err := h.getUserFromSession(c)
+	if err != nil {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	// Verify Telegram hash
+	if !h.verifyTelegramHash(c.Request.URL.Query()) {
+		c.String(http.StatusUnauthorized, "Invalid Telegram Hash")
+		return
+	}
+
+	data := c.Request.URL.Query()
+	idStr := data.Get("id")
+	var tgID int64
+	fmt.Sscanf(idStr, "%d", &tgID)
+
+	// Check if this Telegram ID is already linked to another account
+	existingUser, err := storage.GetUserByTelegramID(tgID)
+	if err == nil && existingUser.ID != user.ID {
+		c.String(http.StatusConflict, "This Telegram account is already linked to another user")
+		return
+	}
+
+	// Link Telegram to current user
+	if err := storage.LinkTelegramAccount(user.ID, tgID); err != nil {
+		log.Printf("Failed to link Telegram account: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to link Telegram account")
+		return
+	}
+
+	// Update user info from Telegram
+	user.TelegramID = tgID
+	user.FirstName = data.Get("first_name")
+	user.LastName = data.Get("last_name")
+	if username := data.Get("username"); username != "" {
+		user.Username = username
+	}
+	if photoURL := data.Get("photo_url"); photoURL != "" {
+		user.PhotoURL = photoURL
+	}
+
+	if err := storage.UpdateUser(user); err != nil {
+		log.Printf("Failed to update user: %v", err)
+	}
+
+	c.Redirect(http.StatusTemporaryRedirect, "/")
 }

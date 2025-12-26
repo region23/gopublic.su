@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"log"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -45,7 +46,13 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	sqlDB.SetMaxOpenConns(100)
 
 	// Auto Migrate
-	if err := db.AutoMigrate(&models.User{}, &models.Token{}, &models.Domain{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Token{},
+		&models.Domain{},
+		&models.AbuseReport{},
+		&models.UserBandwidth{},
+	); err != nil {
 		return nil, err
 	}
 
@@ -98,6 +105,31 @@ func (s *SQLiteStore) CreateUser(user *models.User) error {
 
 func (s *SQLiteStore) UpdateUser(user *models.User) error {
 	return s.db.Save(user).Error
+}
+
+func (s *SQLiteStore) GetUserByYandexID(yandexID string) (*models.User, error) {
+	var user models.User
+	result := s.db.Where("yandex_id = ?", yandexID).First(&user)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, result.Error
+	}
+	return &user, nil
+}
+
+func (s *SQLiteStore) AcceptTerms(userID uint) error {
+	now := time.Now()
+	return s.db.Model(&models.User{}).Where("id = ?", userID).Update("terms_accepted_at", now).Error
+}
+
+func (s *SQLiteStore) LinkYandexAccount(userID uint, yandexID string) error {
+	return s.db.Model(&models.User{}).Where("id = ?", userID).Update("yandex_id", yandexID).Error
+}
+
+func (s *SQLiteStore) LinkTelegramAccount(userID uint, telegramID int64) error {
+	return s.db.Model(&models.User{}).Where("id = ?", userID).Update("telegram_id", telegramID).Error
 }
 
 // --- Token Operations ---
@@ -197,6 +229,54 @@ func (s *SQLiteStore) ValidateDomainOwnership(domainName string, userID uint) (b
 
 func (s *SQLiteStore) CreateDomain(domain *models.Domain) error {
 	return s.db.Create(domain).Error
+}
+
+// --- Abuse Report Operations ---
+
+func (s *SQLiteStore) CreateAbuseReport(report *models.AbuseReport) error {
+	return s.db.Create(report).Error
+}
+
+func (s *SQLiteStore) GetAbuseReports(status string) ([]models.AbuseReport, error) {
+	var reports []models.AbuseReport
+	query := s.db
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if err := query.Order("created_at DESC").Find(&reports).Error; err != nil {
+		return nil, err
+	}
+	return reports, nil
+}
+
+// --- Bandwidth Operations ---
+
+func (s *SQLiteStore) GetUserBandwidthToday(userID uint) (int64, error) {
+	today := time.Now().Truncate(24 * time.Hour)
+	var bandwidth models.UserBandwidth
+	result := s.db.Where("user_id = ? AND date = ?", userID, today).First(&bandwidth)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return 0, nil // No usage today
+		}
+		return 0, result.Error
+	}
+	return bandwidth.BytesUsed, nil
+}
+
+func (s *SQLiteStore) AddUserBandwidth(userID uint, bytes int64) error {
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// Use upsert: insert or update if exists
+	result := s.db.Exec(`
+		INSERT INTO user_bandwidths (user_id, date, bytes_used, created_at, updated_at)
+		VALUES (?, ?, ?, datetime('now'), datetime('now'))
+		ON CONFLICT(user_id, date) DO UPDATE SET
+			bytes_used = bytes_used + excluded.bytes_used,
+			updated_at = datetime('now')
+	`, userID, today, bytes)
+
+	return result.Error
 }
 
 // --- Transaction Operations ---
@@ -380,4 +460,67 @@ func RegenerateToken(userID uint) (string, error) {
 		return "", ErrDBError
 	}
 	return (&SQLiteStore{db: DB}).RegenerateToken(userID)
+}
+
+// AcceptTerms accepts terms for a user using the global DB.
+// Deprecated: Use SQLiteStore.AcceptTerms instead.
+func AcceptTerms(userID uint) error {
+	if DB == nil {
+		return ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).AcceptTerms(userID)
+}
+
+// CreateAbuseReport creates an abuse report using the global DB.
+// Deprecated: Use SQLiteStore.CreateAbuseReport instead.
+func CreateAbuseReport(report *models.AbuseReport) error {
+	if DB == nil {
+		return ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).CreateAbuseReport(report)
+}
+
+// GetUserByYandexID gets user by Yandex ID using the global DB.
+// Deprecated: Use SQLiteStore.GetUserByYandexID instead.
+func GetUserByYandexID(yandexID string) (*models.User, error) {
+	if DB == nil {
+		return nil, ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).GetUserByYandexID(yandexID)
+}
+
+// LinkYandexAccount links a Yandex account to a user using the global DB.
+// Deprecated: Use SQLiteStore.LinkYandexAccount instead.
+func LinkYandexAccount(userID uint, yandexID string) error {
+	if DB == nil {
+		return ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).LinkYandexAccount(userID, yandexID)
+}
+
+// LinkTelegramAccount links a Telegram account to a user using the global DB.
+// Deprecated: Use SQLiteStore.LinkTelegramAccount instead.
+func LinkTelegramAccount(userID uint, telegramID int64) error {
+	if DB == nil {
+		return ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).LinkTelegramAccount(userID, telegramID)
+}
+
+// GetUserBandwidthToday gets today's bandwidth usage for a user using the global DB.
+// Deprecated: Use SQLiteStore.GetUserBandwidthToday instead.
+func GetUserBandwidthToday(userID uint) (int64, error) {
+	if DB == nil {
+		return 0, ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).GetUserBandwidthToday(userID)
+}
+
+// AddUserBandwidth adds bandwidth usage for a user using the global DB.
+// Deprecated: Use SQLiteStore.AddUserBandwidth instead.
+func AddUserBandwidth(userID uint, bytes int64) error {
+	if DB == nil {
+		return ErrDBError
+	}
+	return (&SQLiteStore{db: DB}).AddUserBandwidth(userID, bytes)
 }
