@@ -184,8 +184,8 @@ func (h *Handler) Login(c *gin.Context) {
 		"Version":        version.Version,
 		"YandexEnabled":  h.YandexClientID != "" && h.YandexClientSecret != "",
 		"YandexClientID": h.YandexClientID,
-		"YandexTokenURL": yandexTokenURL,
-		"Origin":         origin,
+		"YandexTokenURL": template.JS(yandexTokenURL), // Prevent escaping in JS context
+		"Origin":         template.JS(origin),         // Prevent escaping in JS context
 	})
 }
 
