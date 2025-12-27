@@ -9,8 +9,8 @@ import (
 type User struct {
 	gorm.Model
 	Email           string
-	TelegramID      int64      `gorm:"uniqueIndex"`
-	YandexID        string     `gorm:"index"` // Yandex OAuth user ID
+	TelegramID      *int64  `gorm:"uniqueIndex"` // nil if not linked via Telegram
+	YandexID        *string `gorm:"uniqueIndex"` // nil if not linked via Yandex
 	FirstName       string
 	LastName        string
 	Username        string

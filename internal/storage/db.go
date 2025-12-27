@@ -56,6 +56,11 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 		return nil, err
 	}
 
+	// Data migration: convert zero values to NULL for optional OAuth IDs
+	// This is needed because the schema changed from int64/string to *int64/*string
+	db.Exec("UPDATE users SET telegram_id = NULL WHERE telegram_id = 0")
+	db.Exec("UPDATE users SET yandex_id = NULL WHERE yandex_id = ''")
+
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -294,8 +299,8 @@ func (s *SQLiteStore) GetUserTotalBandwidth(userID uint) (int64, error) {
 // UserStats holds user information with bandwidth statistics
 type UserStats struct {
 	UserID       uint
-	TelegramID   int64
-	YandexID     string
+	TelegramID   *int64
+	YandexID     *string
 	Email        string
 	Username     string
 	FirstName    string

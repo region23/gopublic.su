@@ -261,10 +261,10 @@ func formatUserInfo(u storage.UserStats) string {
 	}
 
 	// Identifiers
-	if u.TelegramID != 0 {
-		parts = append(parts, fmt.Sprintf("TG:%d", u.TelegramID))
-	} else if u.YandexID != "" {
-		parts = append(parts, fmt.Sprintf("Ya:%s", u.YandexID))
+	if u.TelegramID != nil {
+		parts = append(parts, fmt.Sprintf("TG:%d", *u.TelegramID))
+	} else if u.YandexID != nil {
+		parts = append(parts, fmt.Sprintf("Ya:%s", *u.YandexID))
 	}
 
 	if len(parts) == 0 {

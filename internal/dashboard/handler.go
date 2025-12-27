@@ -258,7 +258,7 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 	if err == storage.ErrNotFound {
 		// Create new user with token and domains in a single transaction
 		newUser := &models.User{
-			TelegramID: tgID,
+			TelegramID: &tgID,
 			FirstName:  firstName,
 			LastName:   lastName,
 			Username:   username,
@@ -738,7 +738,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 	if err == storage.ErrNotFound {
 		// Create new user with token and domains
 		newUser := &models.User{
-			YandexID:  yandexUser.ID,
+			YandexID:  &yandexUser.ID,
 			Email:     yandexUser.DefaultEmail,
 			FirstName: yandexUser.FirstName,
 			LastName:  yandexUser.LastName,
@@ -808,7 +808,7 @@ func (h *Handler) LinkTelegram(c *gin.Context) {
 	}
 
 	// If user already has Telegram linked, redirect to index
-	if user.TelegramID != 0 {
+	if user.TelegramID != nil {
 		c.Redirect(http.StatusTemporaryRedirect, "/")
 		return
 	}
@@ -864,7 +864,7 @@ func (h *Handler) TelegramLinkCallback(c *gin.Context) {
 	}
 
 	// Update user info from Telegram
-	user.TelegramID = tgID
+	user.TelegramID = &tgID
 	user.FirstName = data.Get("first_name")
 	user.LastName = data.Get("last_name")
 	if username := data.Get("username"); username != "" {
