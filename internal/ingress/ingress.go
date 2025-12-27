@@ -16,6 +16,7 @@ import (
 	"gopublic/internal/config"
 	"gopublic/internal/dashboard"
 	"gopublic/internal/middleware"
+	"gopublic/internal/sentry"
 	"gopublic/internal/server"
 	"gopublic/internal/storage"
 	"gopublic/internal/version"
@@ -427,7 +428,7 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	// Open stream to tunnel client
 	stream, err := entry.Session.Open()
 	if err != nil {
-		log.Printf("Failed to open stream for host %s: %v", host, err)
+		sentry.CaptureErrorWithContextf(c, err, "Failed to open stream for host %s", host)
 		c.String(http.StatusBadGateway, "Failed to connect to tunnel client")
 		return
 	}
@@ -436,7 +437,7 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	// Capture request size
 	var reqBuf bytes.Buffer
 	if err := c.Request.Write(&reqBuf); err != nil {
-		log.Printf("Failed to serialize request: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to serialize request")
 		c.Status(http.StatusBadGateway)
 		return
 	}
@@ -444,7 +445,7 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 
 	// Forward request to tunnel
 	if _, err := stream.Write(reqBuf.Bytes()); err != nil {
-		log.Printf("Failed to write request to stream: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to write request to stream")
 		c.Status(http.StatusBadGateway)
 		return
 	}
@@ -452,7 +453,7 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	// Read and forward response
 	resp, err := http.ReadResponse(bufio.NewReader(stream), c.Request)
 	if err != nil {
-		log.Printf("Failed to read response from stream: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to read response from stream")
 		c.Status(http.StatusBadGateway)
 		return
 	}

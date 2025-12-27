@@ -25,6 +25,7 @@ import (
 	"gopublic/internal/auth"
 	"gopublic/internal/config"
 	"gopublic/internal/models"
+	"gopublic/internal/sentry"
 	"gopublic/internal/storage"
 	"gopublic/internal/version"
 )
@@ -191,7 +192,7 @@ func (h *Handler) Index(c *gin.Context) {
 	// Fetch token
 	token, err := storage.GetUserToken(user.ID)
 	if err != nil {
-		log.Printf("Failed to fetch token for user %d: %v", user.ID, err)
+		sentry.CaptureErrorWithContextf(c, err, "Failed to fetch token for user %d", user.ID)
 		c.String(http.StatusInternalServerError, "Failed to load user data")
 		return
 	}
@@ -199,7 +200,7 @@ func (h *Handler) Index(c *gin.Context) {
 	// Fetch domains
 	domains, err := storage.GetUserDomains(user.ID)
 	if err != nil {
-		log.Printf("Failed to fetch domains for user %d: %v", user.ID, err)
+		sentry.CaptureErrorWithContextf(c, err, "Failed to fetch domains for user %d", user.ID)
 		c.String(http.StatusInternalServerError, "Failed to load user data")
 		return
 	}
@@ -281,13 +282,13 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 
 		createdUser, _, err := storage.CreateUserWithTokenAndDomains(reg)
 		if err != nil {
-			log.Printf("Failed to create user: %v", err)
+			sentry.CaptureErrorWithContext(c, err, "Failed to create user")
 			c.String(http.StatusInternalServerError, "Failed to create user account")
 			return
 		}
 		user = createdUser
 	} else if err != nil {
-		log.Printf("Database error looking up user: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Database error looking up user")
 		c.String(http.StatusInternalServerError, "Database error")
 		return
 	} else {
@@ -299,7 +300,7 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 			user.PhotoURL = photoURL
 		}
 		if err := storage.UpdateUser(user); err != nil {
-			log.Printf("Failed to update user: %v", err)
+			sentry.CaptureErrorWithContext(c, err, "Failed to update user")
 			c.String(http.StatusInternalServerError, "Failed to update user")
 			return
 		}
@@ -307,7 +308,7 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 
 	// Set secure signed session cookie
 	if err := h.Session.SetSession(c.Writer, user.ID); err != nil {
-		log.Printf("Failed to set session: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to set session")
 		c.String(http.StatusInternalServerError, "Failed to create session")
 		return
 	}
@@ -343,7 +344,7 @@ func (h *Handler) RegenerateToken(c *gin.Context) {
 
 	newToken, err := storage.RegenerateToken(user.ID)
 	if err != nil {
-		log.Printf("Failed to regenerate token for user %d: %v", user.ID, err)
+		sentry.CaptureErrorWithContextf(c, err, "Failed to regenerate token for user %d", user.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to regenerate token"})
 		return
 	}
@@ -434,7 +435,7 @@ func (h *Handler) AcceptTerms(c *gin.Context) {
 	}
 
 	if err := storage.AcceptTerms(user.ID); err != nil {
-		log.Printf("Failed to accept terms for user %d: %v", user.ID, err)
+		sentry.CaptureErrorWithContextf(c, err, "Failed to accept terms for user %d", user.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept terms"})
 		return
 	}
@@ -495,7 +496,7 @@ func (h *Handler) SubmitAbuseReport(c *gin.Context) {
 	}
 
 	if err := storage.CreateAbuseReport(report); err != nil {
-		log.Printf("Failed to create abuse report: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to create abuse report")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit report"})
 		return
 	}
@@ -670,7 +671,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 	tokenResp, err := http.PostForm("https://oauth.yandex.ru/token", tokenData)
 	if err != nil {
-		log.Printf("Failed to exchange code for token: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to exchange code for token")
 		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
 		return
 	}
@@ -678,7 +679,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 	if tokenResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(tokenResp.Body)
-		log.Printf("Token exchange failed: %s", string(body))
+		sentry.CaptureErrorWithContext(c, fmt.Errorf("token exchange failed: %s", string(body)), "Yandex token exchange failed")
 		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
 		return
 	}
@@ -689,7 +690,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 	}
 
 	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenResult); err != nil {
-		log.Printf("Failed to decode token response: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to decode token response")
 		c.String(http.StatusInternalServerError, "Failed to authenticate with Yandex")
 		return
 	}
@@ -700,7 +701,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 	userResp, err := http.DefaultClient.Do(userReq)
 	if err != nil {
-		log.Printf("Failed to get user info: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to get user info from Yandex")
 		c.String(http.StatusInternalServerError, "Failed to get user info from Yandex")
 		return
 	}
@@ -712,7 +713,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 	var yandexUser YandexUserInfo
 	if err := json.Unmarshal(userBody, &yandexUser); err != nil {
-		log.Printf("Failed to decode user info: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to decode Yandex user info")
 		c.String(http.StatusInternalServerError, "Failed to get user info from Yandex")
 		return
 	}
@@ -724,7 +725,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 	if existingUser, err := h.getUserFromSession(c); err == nil {
 		// User is logged in - link Yandex account to existing user
 		if err := storage.LinkYandexAccount(existingUser.ID, yandexUser.ID); err != nil {
-			log.Printf("Failed to link Yandex account: %v", err)
+			sentry.CaptureErrorWithContext(c, err, "Failed to link Yandex account")
 			c.String(http.StatusInternalServerError, "Failed to link Yandex account")
 			return
 		}
@@ -762,13 +763,13 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 		createdUser, _, err := storage.CreateUserWithTokenAndDomains(reg)
 		if err != nil {
-			log.Printf("Failed to create user: %v", err)
+			sentry.CaptureErrorWithContext(c, err, "Failed to create user via Yandex OAuth")
 			c.String(http.StatusInternalServerError, "Failed to create user account")
 			return
 		}
 		user = createdUser
 	} else if err != nil {
-		log.Printf("Database error looking up user: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Database error looking up Yandex user")
 		c.String(http.StatusInternalServerError, "Database error")
 		return
 	} else {
@@ -783,7 +784,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 			user.PhotoURL = avatarURL
 		}
 		if err := storage.UpdateUser(user); err != nil {
-			log.Printf("Failed to update user: %v", err)
+			sentry.CaptureErrorWithContext(c, err, "Failed to update Yandex user")
 			c.String(http.StatusInternalServerError, "Failed to update user")
 			return
 		}
@@ -791,7 +792,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 
 	// Set session
 	if err := h.Session.SetSession(c.Writer, user.ID); err != nil {
-		log.Printf("Failed to set session: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to set session after Yandex login")
 		c.String(http.StatusInternalServerError, "Failed to create session")
 		return
 	}
@@ -858,7 +859,7 @@ func (h *Handler) TelegramLinkCallback(c *gin.Context) {
 
 	// Link Telegram to current user
 	if err := storage.LinkTelegramAccount(user.ID, tgID); err != nil {
-		log.Printf("Failed to link Telegram account: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to link Telegram account")
 		c.String(http.StatusInternalServerError, "Failed to link Telegram account")
 		return
 	}
@@ -875,7 +876,7 @@ func (h *Handler) TelegramLinkCallback(c *gin.Context) {
 	}
 
 	if err := storage.UpdateUser(user); err != nil {
-		log.Printf("Failed to update user: %v", err)
+		sentry.CaptureErrorWithContext(c, err, "Failed to update user after Telegram link")
 	}
 
 	c.Redirect(http.StatusTemporaryRedirect, "/")

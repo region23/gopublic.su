@@ -15,6 +15,7 @@ import (
 
 	"gopublic/internal/config"
 	"gopublic/internal/models"
+	"gopublic/internal/sentry"
 	"gopublic/internal/storage"
 	"gopublic/pkg/protocol"
 )
@@ -191,7 +192,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 1. Setup yamux session
 	session, stream, err := s.setupYamuxSession(conn)
 	if err != nil {
-		log.Printf("Session setup failed for %s: %v", conn.RemoteAddr(), err)
+		sentry.CaptureErrorf(err, "Session setup failed for %s", conn.RemoteAddr())
 		return
 	}
 
@@ -201,7 +202,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 2. Authenticate client
 	user, force, err := s.authenticate(decoder, stream, conn.RemoteAddr().String())
 	if err != nil {
-		log.Printf("Authentication failed for %s: %v", conn.RemoteAddr(), err)
+		sentry.CaptureErrorf(err, "Authentication failed for %s", conn.RemoteAddr())
 		session.Close()
 		return
 	}
@@ -229,7 +230,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 4. Process tunnel request and bind domains
 	boundDomains, err := s.processTunnelRequest(decoder, stream, session, user, conn.RemoteAddr().String())
 	if err != nil {
-		log.Printf("Tunnel request failed for %s: %v", conn.RemoteAddr(), err)
+		sentry.CaptureErrorf(err, "Tunnel request failed for %s", conn.RemoteAddr())
 		session.Close()
 		return
 	}
@@ -239,7 +240,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	// 6. Send success response
 	if err := s.sendSuccessResponse(stream, boundDomains, user.ID); err != nil {
-		log.Printf("Failed to send success response to %s: %v", conn.RemoteAddr(), err)
+		sentry.CaptureErrorf(err, "Failed to send success response to %s", conn.RemoteAddr())
 	}
 	log.Printf("Handshake complete for %s. Bound domains: %v", conn.RemoteAddr(), boundDomains)
 
