@@ -126,7 +126,7 @@ func (st *SharedTunnel) untrackConn(conn net.Conn) {
 }
 
 // Start establishes a connection to the server and starts the shared tunnel.
-func (st *SharedTunnel) Start() error {
+func (st *SharedTunnel) Start(ctx context.Context) error {
 	st.publishEvent(events.EventConnecting, nil)
 
 	host, _, _ := net.SplitHostPort(st.ServerAddr)
@@ -147,7 +147,7 @@ func (st *SharedTunnel) Start() error {
 			st.publishEvent(events.EventError, events.ErrorData{Error: err, Context: "connect"})
 			return fmt.Errorf("failed to connect to local server: %v", err)
 		}
-		return st.handleSession(conn, connectStart)
+		return st.handleSession(ctx, conn, connectStart)
 	}
 
 	// Build TLS config
@@ -173,13 +173,13 @@ func (st *SharedTunnel) Start() error {
 			st.publishEvent(events.EventError, events.ErrorData{Error: errPlain, Context: "connect"})
 			return fmt.Errorf("failed to connect: %v", errPlain)
 		}
-		return st.handleSession(connPlain, connectStart)
+		return st.handleSession(ctx, connPlain, connectStart)
 	}
 
-	return st.handleSession(conn, connectStart)
+	return st.handleSession(ctx, conn, connectStart)
 }
 
-func (st *SharedTunnel) handleSession(conn net.Conn, connectStart time.Time) error {
+func (st *SharedTunnel) handleSession(ctx context.Context, conn net.Conn, connectStart time.Time) error {
 	defer conn.Close()
 
 	st.mu.Lock()
@@ -205,6 +205,12 @@ func (st *SharedTunnel) handleSession(conn net.Conn, connectStart time.Time) err
 		st.mu.Lock()
 		st.session = nil
 		st.mu.Unlock()
+		session.Close()
+	}()
+
+	// Watch for context cancellation to close session
+	go func() {
+		<-ctx.Done()
 		session.Close()
 	}()
 
@@ -537,9 +543,14 @@ func (st *SharedTunnel) StartWithReconnect(ctx context.Context, config *Reconnec
 		attempt++
 		logger.Info("Connecting to %s...", st.ServerAddr)
 
-		err := st.Start()
+		err := st.Start(ctx)
 		if err == nil {
 			return nil
+		}
+
+		// Check if context was cancelled
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
 		if IsAlreadyConnectedError(err) {
