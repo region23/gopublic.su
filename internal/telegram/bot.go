@@ -392,19 +392,36 @@ type GeoIPResponse struct {
 
 // getGeoLocation fetches location info for an IP address using ip-api.com
 // Returns empty string if lookup fails (non-blocking, best-effort)
+// Free tier: 45 requests/minute, no API key needed
 func getGeoLocation(ip string) string {
 	// Skip private/local IPs
-	if ip == "" || ip == "127.0.0.1" || ip == "::1" || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") {
+	if ip == "" || ip == "127.0.0.1" || ip == "::1" ||
+		strings.HasPrefix(ip, "192.168.") ||
+		strings.HasPrefix(ip, "10.") ||
+		strings.HasPrefix(ip, "172.16.") ||
+		strings.HasPrefix(ip, "172.17.") ||
+		strings.HasPrefix(ip, "172.18.") ||
+		strings.HasPrefix(ip, "172.19.") ||
+		strings.HasPrefix(ip, "172.2") || // 172.20-172.31
+		strings.HasPrefix(ip, "172.3") {
 		return ""
 	}
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode,regionName,city", ip))
 	if err != nil {
-		log.Printf("GeoIP lookup failed for %s: %v", ip, err)
+		// Network error, timeout, etc. - silently continue without geo
 		return ""
 	}
 	defer resp.Body.Close()
+
+	// Handle rate limiting (429) or other HTTP errors
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			log.Printf("GeoIP rate limited (429), skipping lookup")
+		}
+		return ""
+	}
 
 	var geo GeoIPResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geo); err != nil || geo.Status != "success" {
