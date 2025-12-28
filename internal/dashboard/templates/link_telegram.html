@@ -225,6 +225,101 @@
                 font-size: 1.5rem;
             }
         }
+
+        /* Telegram Bot Auth Styles */
+        .telegram-bot-auth {
+            text-align: center;
+            padding: 0.5rem 0;
+        }
+
+        .auth-state {
+            padding: 1rem 0;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-light);
+            border-top-color: var(--lumon-teal);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .qr-container {
+            margin-bottom: 1rem;
+        }
+
+        .qr-container canvas {
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+        }
+
+        .auth-hint {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .telegram-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: #0088cc;
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .telegram-btn:hover {
+            background: #006699;
+        }
+
+        .telegram-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .pulse-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--lumon-teal);
+            margin: 0 auto 1rem;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+        }
+
+        .error-text {
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .retry-btn {
+            padding: 0.5rem 1rem;
+            background: var(--lumon-teal);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .retry-btn:hover {
+            background: var(--lumon-teal-light);
+        }
     </style>
 </head>
 <body>
@@ -254,6 +349,8 @@
                 </div>
             </div>
 
+            {{if .TelegramWidgetEnabled}}
+            <!-- Legacy Telegram Widget -->
             <div class="auth-widget">
                 <script async src="https://telegram.org/js/telegram-widget.js?22"
                         data-telegram-login="{{.BotName}}"
@@ -261,6 +358,38 @@
                         data-auth-url="{{.AuthURL}}"
                         data-request-access="write"></script>
             </div>
+            {{else}}
+            <!-- New Bot Auth -->
+            <div id="telegram-bot-auth" class="telegram-bot-auth">
+                <div id="auth-loading" class="auth-state">
+                    <div class="spinner"></div>
+                    <p>Загрузка...</p>
+                </div>
+
+                <div id="auth-ready" class="auth-state" style="display: none;">
+                    <div class="qr-container">
+                        <canvas id="qr-code"></canvas>
+                    </div>
+                    <p class="auth-hint">Отсканируйте QR-код или</p>
+                    <a id="telegram-link" href="#" class="telegram-btn" target="_blank">
+                        <svg class="telegram-icon" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.962 6.502-1.359 8.627-.168.9-.5 1.201-.82 1.23-.697.064-1.226-.461-1.901-.903-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.139-5.062 3.345-.479.329-.913.489-1.302.481-.428-.009-1.252-.242-1.865-.442-.752-.244-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.015 3.333-1.386 4.025-1.627 4.477-1.635.099-.002.321.023.465.141.12.098.153.229.168.326.015.098.033.321.018.496z" fill="currentColor"/>
+                        </svg>
+                        Открыть в Telegram
+                    </a>
+                </div>
+
+                <div id="auth-waiting" class="auth-state" style="display: none;">
+                    <div class="pulse-circle"></div>
+                    <p>Подтвердите привязку в Telegram...</p>
+                </div>
+
+                <div id="auth-error" class="auth-state" style="display: none;">
+                    <p class="error-text">Не удалось создать ссылку</p>
+                    <button onclick="initTelegramAuth()" class="retry-btn">Попробовать снова</button>
+                </div>
+            </div>
+            {{end}}
 
             <a href="/" class="back-link">← Вернуться в личный кабинет</a>
         </div>
@@ -275,5 +404,113 @@
             {{end}}
         </footer>
     </div>
+
+    {{if not .TelegramWidgetEnabled}}
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script>
+    let currentHash = null;
+    let pollInterval = null;
+    let authTimeout = null;
+
+    async function initTelegramAuth() {
+        showState('loading');
+
+        try {
+            const response = await fetch('/api/telegram-auth/init');
+            const data = await response.json();
+
+            if (data.error) {
+                showState('error');
+                return;
+            }
+
+            currentHash = data.hash;
+
+            QRCode.toCanvas(document.getElementById('qr-code'), data.deep_link, {
+                width: 200,
+                margin: 2,
+                color: {
+                    dark: '#0d7377',
+                    light: '#ffffff'
+                }
+            });
+
+            document.getElementById('telegram-link').href = data.deep_link;
+
+            showState('ready');
+            startPolling();
+
+            authTimeout = setTimeout(() => {
+                if (currentHash === data.hash) {
+                    stopPolling();
+                    showState('error');
+                }
+            }, data.ttl * 1000);
+
+        } catch (e) {
+            console.error('Init error:', e);
+            showState('error');
+        }
+    }
+
+    function startPolling() {
+        pollInterval = setInterval(pollAuthStatus, 2000);
+    }
+
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        if (authTimeout) {
+            clearTimeout(authTimeout);
+            authTimeout = null;
+        }
+    }
+
+    async function pollAuthStatus() {
+        if (!currentHash) return;
+
+        try {
+            const response = await fetch('/api/telegram-auth/poll?hash=' + currentHash);
+            const data = await response.json();
+
+            switch (data.status) {
+                case 'approved':
+                    stopPolling();
+                    window.location.href = '/';
+                    break;
+                case 'rejected':
+                    stopPolling();
+                    showState('error');
+                    break;
+                case 'expired':
+                    stopPolling();
+                    showState('error');
+                    break;
+                case 'pending':
+                    showState('waiting');
+                    break;
+                case 'error':
+                    stopPolling();
+                    alert(data.error || 'Произошла ошибка');
+                    showState('error');
+                    break;
+            }
+        } catch (e) {
+            console.error('Poll error:', e);
+        }
+    }
+
+    function showState(state) {
+        document.getElementById('auth-loading').style.display = state === 'loading' ? 'block' : 'none';
+        document.getElementById('auth-ready').style.display = state === 'ready' ? 'block' : 'none';
+        document.getElementById('auth-waiting').style.display = state === 'waiting' ? 'block' : 'none';
+        document.getElementById('auth-error').style.display = state === 'error' ? 'block' : 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', initTelegramAuth);
+    </script>
+    {{end}}
 </body>
 </html>

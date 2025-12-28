@@ -22,8 +22,9 @@ type Config struct {
 	MaxConnections   int    // Max concurrent tunnel connections
 
 	// Telegram OAuth
-	TelegramBotToken string
-	TelegramBotName  string
+	TelegramBotToken      string
+	TelegramBotName       string
+	TelegramWidgetEnabled bool // If true, use legacy Telegram Login Widget instead of bot auth
 
 	// Yandex OAuth
 	YandexClientID     string
@@ -93,24 +94,25 @@ func LoadFromEnv() (*Config, error) {
 	}
 
 	cfg := &Config{
-		Domain:              os.Getenv("DOMAIN_NAME"),
-		ProjectName:         getEnvOrDefault("PROJECT_NAME", "Go Public"),
-		Email:               os.Getenv("EMAIL"),
-		InsecureMode:        os.Getenv("INSECURE_HTTP") == "true",
-		DBPath:              getEnvOrDefault("DB_PATH", "gopublic.db"),
-		ControlPlanePort:    getEnvOrDefault("CONTROL_PLANE_PORT", ":4443"),
-		MaxConnections:      1000,
-		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramBotName:     os.Getenv("TELEGRAM_BOT_NAME"),
-		YandexClientID:      os.Getenv("YANDEX_CLIENT_ID"),
-		YandexClientSecret:  os.Getenv("YANDEX_CLIENT_SECRET"),
-		AdminTelegramID:     adminTelegramID,
-		SentryDSN:           os.Getenv("SENTRY_DSN"),
-		SentryEnvironment:   getEnvOrDefault("SENTRY_ENVIRONMENT", "development"),
-		SentrySampleRate:    sentrySampleRate,
-		GitHubRepo:          os.Getenv("GITHUB_REPO"),
-		DomainsPerUser:      domainsPerUser,
-		DailyBandwidthLimit: dailyBandwidthLimit,
+		Domain:                os.Getenv("DOMAIN_NAME"),
+		ProjectName:           getEnvOrDefault("PROJECT_NAME", "Go Public"),
+		Email:                 os.Getenv("EMAIL"),
+		InsecureMode:          os.Getenv("INSECURE_HTTP") == "true",
+		DBPath:                getEnvOrDefault("DB_PATH", "gopublic.db"),
+		ControlPlanePort:      getEnvOrDefault("CONTROL_PLANE_PORT", ":4443"),
+		MaxConnections:        1000,
+		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotName:       os.Getenv("TELEGRAM_BOT_NAME"),
+		TelegramWidgetEnabled: os.Getenv("TELEGRAM_OAUTH_WIDGET_ENABLED") == "true",
+		YandexClientID:        os.Getenv("YANDEX_CLIENT_ID"),
+		YandexClientSecret:    os.Getenv("YANDEX_CLIENT_SECRET"),
+		AdminTelegramID:       adminTelegramID,
+		SentryDSN:             os.Getenv("SENTRY_DSN"),
+		SentryEnvironment:     getEnvOrDefault("SENTRY_ENVIRONMENT", "development"),
+		SentrySampleRate:      sentrySampleRate,
+		GitHubRepo:            os.Getenv("GITHUB_REPO"),
+		DomainsPerUser:        domainsPerUser,
+		DailyBandwidthLimit:   dailyBandwidthLimit,
 	}
 
 	// Parse session keys

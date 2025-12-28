@@ -27,6 +27,7 @@ import (
 	"gopublic/internal/models"
 	"gopublic/internal/sentry"
 	"gopublic/internal/storage"
+	"gopublic/internal/telegram"
 	"gopublic/internal/version"
 )
 
@@ -41,17 +42,19 @@ type UserSessionProvider interface {
 }
 
 type Handler struct {
-	BotToken            string
-	BotName             string
-	Domain              string
-	GitHubRepo          string
-	DomainsPerUser      int
-	DailyBandwidthLimit int64 // in bytes
-	AdminTelegramID     int64
-	YandexClientID      string
-	YandexClientSecret  string
-	Session             *auth.SessionManager
-	UserSessions        UserSessionProvider // Optional: provides active session info
+	BotToken              string
+	BotName               string
+	Domain                string
+	GitHubRepo            string
+	DomainsPerUser        int
+	DailyBandwidthLimit   int64 // in bytes
+	AdminTelegramID       int64
+	YandexClientID        string
+	YandexClientSecret    string
+	Session               *auth.SessionManager
+	UserSessions          UserSessionProvider // Optional: provides active session info
+	TelegramBot           *telegram.Bot       // Telegram bot for auth
+	TelegramWidgetEnabled bool                // If true, use legacy Telegram Login Widget
 }
 
 // SetUserSessions sets the user session provider for displaying connection status.
@@ -174,11 +177,13 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "login.html", gin.H{
-		"BotName":       h.BotName,
-		"AuthURL":       authURL,
-		"GitHubRepo":    h.GitHubRepo,
-		"Version":       version.Version,
-		"YandexEnabled": h.YandexClientID != "" && h.YandexClientSecret != "",
+		"BotName":               h.BotName,
+		"AuthURL":               authURL,
+		"GitHubRepo":            h.GitHubRepo,
+		"Version":               version.Version,
+		"YandexEnabled":         h.YandexClientID != "" && h.YandexClientSecret != "",
+		"TelegramBotEnabled":    h.BotName != "" && h.BotToken != "",
+		"TelegramWidgetEnabled": h.TelegramWidgetEnabled,
 	})
 }
 
@@ -951,11 +956,13 @@ func (h *Handler) LinkTelegram(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "link_telegram.html", gin.H{
-		"BotName":    h.BotName,
-		"AuthURL":    authURL,
-		"GitHubRepo": h.GitHubRepo,
-		"Version":    version.Version,
-		"User":       user,
+		"BotName":               h.BotName,
+		"AuthURL":               authURL,
+		"GitHubRepo":            h.GitHubRepo,
+		"Version":               version.Version,
+		"User":                  user,
+		"TelegramBotEnabled":    h.BotName != "" && h.BotToken != "",
+		"TelegramWidgetEnabled": h.TelegramWidgetEnabled,
 	})
 }
 
@@ -1009,4 +1016,181 @@ func (h *Handler) TelegramLinkCallback(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusTemporaryRedirect, "/")
+}
+
+// InitTelegramAuth generates a new auth hash for Telegram bot authentication
+// GET /api/telegram-auth/init
+func (h *Handler) InitTelegramAuth(c *gin.Context) {
+	if h.TelegramBot == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Telegram auth not configured"})
+		return
+	}
+
+	ip := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	// Check if user is already logged in (linking mode)
+	isLinking := false
+	var userID uint
+	if user, err := h.getUserFromSession(c); err == nil {
+		isLinking = true
+		userID = user.ID
+	}
+
+	hash, err := h.TelegramBot.GetPendingLogins().Create(ip, userAgent, isLinking, userID)
+	if err != nil {
+		sentry.CaptureErrorWithContext(c, err, "Failed to create pending login")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate auth link"})
+		return
+	}
+
+	deepLink := fmt.Sprintf("https://t.me/%s?start=%s", h.TelegramBot.GetBotName(), hash)
+
+	c.JSON(http.StatusOK, gin.H{
+		"hash":      hash,
+		"deep_link": deepLink,
+		"ttl":       300, // 5 minutes in seconds
+	})
+}
+
+// PollTelegramAuth checks the status of a pending login
+// GET /api/telegram-auth/poll?hash=xxx
+func (h *Handler) PollTelegramAuth(c *gin.Context) {
+	hash := c.Query("hash")
+	if hash == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing hash"})
+		return
+	}
+
+	if h.TelegramBot == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Telegram auth not configured"})
+		return
+	}
+
+	pending, ok := h.TelegramBot.GetPendingLogins().Get(hash)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"status": "expired"})
+		return
+	}
+
+	switch pending.Status {
+	case telegram.StatusPending:
+		c.JSON(http.StatusOK, gin.H{"status": "pending"})
+
+	case telegram.StatusRejected:
+		h.TelegramBot.GetPendingLogins().Delete(hash)
+		c.JSON(http.StatusOK, gin.H{"status": "rejected"})
+
+	case telegram.StatusApproved:
+		login, ok := h.TelegramBot.GetPendingLogins().Consume(hash)
+		if !ok {
+			c.JSON(http.StatusOK, gin.H{"status": "expired"})
+			return
+		}
+
+		if login.IsLinking {
+			if err := h.handleTelegramLinkFromBot(c, login); err != nil {
+				c.JSON(http.StatusConflict, gin.H{
+					"status": "error",
+					"error":  err.Error(),
+				})
+				return
+			}
+		} else {
+			if err := h.handleTelegramLoginFromBot(c, login); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status": "error",
+					"error":  err.Error(),
+				})
+				return
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "approved"})
+	}
+}
+
+// handleTelegramLoginFromBot creates/updates user and sets session
+func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.PendingLogin) error {
+	user, err := storage.GetUserByTelegramID(login.TelegramID)
+
+	if err == storage.ErrNotFound {
+		// Create new user
+		newUser := &models.User{
+			TelegramID: &login.TelegramID,
+			FirstName:  login.FirstName,
+			LastName:   login.LastName,
+			Username:   login.Username,
+			PhotoURL:   login.PhotoURL,
+		}
+
+		// Generate domains
+		prefixes := []string{"misty", "silent", "bold", "rapid", "cool"}
+		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
+		var domains []string
+		for i := 0; i < h.DomainsPerUser; i++ {
+			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			domains = append(domains, name)
+		}
+
+		reg := storage.UserRegistration{
+			User:    newUser,
+			Domains: domains,
+		}
+
+		createdUser, _, err := storage.CreateUserWithTokenAndDomains(reg)
+		if err != nil {
+			sentry.CaptureErrorWithContext(c, err, "Failed to create user via Telegram bot auth")
+			return err
+		}
+		user = createdUser
+	} else if err != nil {
+		sentry.CaptureErrorWithContext(c, err, "Database error looking up user")
+		return err
+	} else {
+		// Update existing user info
+		user.FirstName = login.FirstName
+		user.LastName = login.LastName
+		user.Username = login.Username
+		if login.PhotoURL != "" {
+			user.PhotoURL = login.PhotoURL
+		}
+		if err := storage.UpdateUser(user); err != nil {
+			sentry.CaptureErrorWithContext(c, err, "Failed to update user")
+			return err
+		}
+	}
+
+	return h.Session.SetSession(c.Writer, user.ID)
+}
+
+// handleTelegramLinkFromBot links Telegram to existing account
+func (h *Handler) handleTelegramLinkFromBot(c *gin.Context, login *telegram.PendingLogin) error {
+	// Check if this Telegram is already linked to another account
+	existingUser, err := storage.GetUserByTelegramID(login.TelegramID)
+	if err == nil && existingUser.ID != login.UserID {
+		return fmt.Errorf("этот Telegram аккаунт уже привязан к другому пользователю")
+	}
+
+	if err := storage.LinkTelegramAccount(login.UserID, login.TelegramID); err != nil {
+		sentry.CaptureErrorWithContext(c, err, "Failed to link Telegram account")
+		return err
+	}
+
+	user, err := storage.GetUserByID(login.UserID)
+	if err != nil {
+		return err
+	}
+
+	user.TelegramID = &login.TelegramID
+	user.FirstName = login.FirstName
+	user.LastName = login.LastName
+	if login.Username != "" {
+		user.Username = login.Username
+	}
+	if login.PhotoURL != "" {
+		user.PhotoURL = login.PhotoURL
+	}
+
+	return storage.UpdateUser(user)
 }

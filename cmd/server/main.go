@@ -75,12 +75,16 @@ func main() {
 		log.Fatalf("Failed to initialize dashboard: %v", err)
 	}
 
-	// 5. Start Telegram Admin Bot
-	var adminBot *telegram.Bot
-	if cfg.HasAdminNotifications() {
-		adminBot = telegram.NewBot(cfg.TelegramBotToken, cfg.AdminTelegramID)
-		adminBot.Start()
+	// 5. Start Telegram Bot (for admin commands and auth)
+	var telegramBot *telegram.Bot
+	if cfg.HasTelegramOAuth() {
+		telegramBot = telegram.NewBot(cfg.TelegramBotToken, cfg.TelegramBotName, cfg.AdminTelegramID)
+		telegramBot.Start()
 	}
+
+	// Connect bot to dashboard for Telegram auth
+	dashHandler.TelegramBot = telegramBot
+	dashHandler.TelegramWidgetEnabled = cfg.TelegramWidgetEnabled
 
 	// 6. Configure TLS & Autocert (if applicable)
 	var tlsConfig *tls.Config
@@ -205,8 +209,9 @@ func main() {
 	}
 
 	// Stop Telegram bot
-	if adminBot != nil {
-		adminBot.Stop()
+	if telegramBot != nil {
+		telegramBot.Stop()
+		telegramBot.GetPendingLogins().Stop()
 	}
 
 	log.Println("Server shutdown complete")

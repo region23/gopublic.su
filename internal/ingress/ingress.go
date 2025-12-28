@@ -406,6 +406,18 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 		i.DashHandler.LinkTelegram(c)
 	case "/auth/telegram/link":
 		i.DashHandler.TelegramLinkCallback(c)
+	case "/api/telegram-auth/init":
+		if c.Request.Method == http.MethodGet {
+			i.DashHandler.InitTelegramAuth(c)
+		} else {
+			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
+		}
+	case "/api/telegram-auth/poll":
+		if c.Request.Method == http.MethodGet {
+			i.DashHandler.PollTelegramAuth(c)
+		} else {
+			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
+		}
 	default:
 		c.String(http.StatusNotFound, "Not Found")
 	}

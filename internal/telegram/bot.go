@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,27 +15,41 @@ import (
 	"gopublic/internal/storage"
 )
 
-// Bot handles Telegram bot interactions for admin statistics
+// Bot handles Telegram bot interactions for admin statistics and auth
 type Bot struct {
-	token        string
-	adminID      int64
-	stopCh       chan struct{}
-	lastUpdateID int64
-	client       *http.Client
-	ctx          context.Context
-	cancel       context.CancelFunc
+	token         string
+	botName       string
+	adminID       int64
+	stopCh        chan struct{}
+	lastUpdateID  int64
+	pendingLogins *PendingLoginStore
+	client        *http.Client
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 // NewBot creates a new Telegram bot instance
-func NewBot(token string, adminID int64) *Bot {
+func NewBot(token string, botName string, adminID int64) *Bot {
 	return &Bot{
-		token:   token,
-		adminID: adminID,
-		stopCh:  make(chan struct{}),
+		token:         token,
+		botName:       botName,
+		adminID:       adminID,
+		stopCh:        make(chan struct{}),
+		pendingLogins: NewPendingLoginStore(),
 		client: &http.Client{
 			Timeout: 35 * time.Second, // Slightly longer than Telegram's 30s long-polling timeout
 		},
 	}
+}
+
+// GetPendingLogins returns the pending login store
+func (b *Bot) GetPendingLogins() *PendingLoginStore {
+	return b.pendingLogins
+}
+
+// GetBotName returns the bot username for deep links
+func (b *Bot) GetBotName() string {
+	return b.botName
 }
 
 // Start begins the long polling loop for receiving updates
@@ -60,8 +75,9 @@ func (b *Bot) Stop() {
 
 // Update represents a Telegram update
 type Update struct {
-	UpdateID int64   `json:"update_id"`
-	Message  *Message `json:"message,omitempty"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message,omitempty"`
+	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
 }
 
 // Message represents a Telegram message
@@ -76,6 +92,7 @@ type Message struct {
 type User struct {
 	ID        int64  `json:"id"`
 	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name,omitempty"`
 	Username  string `json:"username,omitempty"`
 }
 
@@ -85,10 +102,48 @@ type Chat struct {
 	Type string `json:"type"`
 }
 
+// CallbackQuery represents a callback query from inline keyboard
+type CallbackQuery struct {
+	ID      string   `json:"id"`
+	From    *User    `json:"from"`
+	Message *Message `json:"message,omitempty"`
+	Data    string   `json:"data,omitempty"`
+}
+
+// InlineKeyboardButton represents an inline keyboard button
+type InlineKeyboardButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data,omitempty"`
+}
+
+// InlineKeyboardMarkup represents an inline keyboard
+type InlineKeyboardMarkup struct {
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+}
+
 // GetUpdatesResponse represents the response from getUpdates
 type GetUpdatesResponse struct {
 	OK     bool     `json:"ok"`
 	Result []Update `json:"result"`
+}
+
+// GetUserProfilePhotosResponse represents the response from getUserProfilePhotos
+type GetUserProfilePhotosResponse struct {
+	OK     bool `json:"ok"`
+	Result struct {
+		TotalCount int `json:"total_count"`
+		Photos     [][]struct {
+			FileID string `json:"file_id"`
+		} `json:"photos"`
+	} `json:"result"`
+}
+
+// GetFileResponse represents the response from getFile
+type GetFileResponse struct {
+	OK     bool `json:"ok"`
+	Result struct {
+		FilePath string `json:"file_path"`
+	} `json:"result"`
 }
 
 func (b *Bot) pollUpdates() {
@@ -138,7 +193,7 @@ func (b *Bot) getUpdates() ([]Update, error) {
 	params := url.Values{}
 	params.Set("offset", fmt.Sprintf("%d", b.lastUpdateID+1))
 	params.Set("timeout", "30")
-	params.Set("allowed_updates", `["message"]`)
+	params.Set("allowed_updates", `["message","callback_query"]`)
 
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?%s", b.token, params.Encode())
 
@@ -176,29 +231,40 @@ func (b *Bot) getUpdates() ([]Update, error) {
 }
 
 func (b *Bot) handleUpdate(update Update) {
+	// Handle callback queries (inline button presses)
+	if update.CallbackQuery != nil {
+		b.handleCallbackQuery(update.CallbackQuery)
+		return
+	}
+
 	if update.Message == nil {
 		log.Printf("Telegram bot: update %d has no message", update.UpdateID)
 		return
 	}
 
 	msg := update.Message
-	log.Printf("Telegram bot: message from user %d (admin=%d), chat %d, text: %s",
-		msg.From.ID, b.adminID, msg.Chat.ID, msg.Text)
+	text := strings.TrimSpace(msg.Text)
 
-	// Only respond to admin (check both user ID and chat ID for security)
+	log.Printf("Telegram bot: message from user %d (admin=%d), chat %d, text: %s",
+		msg.From.ID, b.adminID, msg.Chat.ID, text)
+
+	// Handle /start with auth hash (any user can do this)
+	if strings.HasPrefix(text, "/start ") {
+		hash := strings.TrimPrefix(text, "/start ")
+		b.handleAuthStart(msg, hash)
+		return
+	}
+
+	// Admin commands - check permissions
 	if msg.From == nil || msg.From.ID != b.adminID {
 		log.Printf("Telegram bot: ignoring message from non-admin user %d", msg.From.ID)
 		return
 	}
-
-	// Also verify the chat is a private chat with admin (not a group)
 	if msg.Chat.ID != b.adminID {
 		log.Printf("Telegram bot: ignoring message from non-admin chat %d", msg.Chat.ID)
 		return
 	}
 
-	// Handle commands
-	text := strings.TrimSpace(msg.Text)
 	log.Printf("Telegram bot: processing command: %s", text)
 	switch {
 	case text == "/stats" || text == "/start":
@@ -310,6 +376,237 @@ func escapeMarkdown(s string) string {
 		"`", "\\`",
 	)
 	return replacer.Replace(s)
+}
+
+// handleAuthStart handles /start command with auth hash
+func (b *Bot) handleAuthStart(msg *Message, hash string) {
+	if msg.From == nil {
+		return
+	}
+
+	pending, ok := b.pendingLogins.Get(hash)
+	if !ok {
+		b.sendMessage(msg.Chat.ID, "Ссылка для входа недействительна или истекла.")
+		return
+	}
+
+	browserInfo := parseUserAgent(pending.UserAgent)
+
+	var actionText string
+	if pending.IsLinking {
+		actionText = "Привязать Telegram к аккаунту"
+	} else {
+		actionText = "Войти в аккаунт"
+	}
+
+	text := fmt.Sprintf(
+		"*%s GoPublic*\n\n"+
+			"IP-адрес: `%s`\n"+
+			"Браузер: %s\n\n"+
+			"Если это не вы — нажмите Отклонить.",
+		actionText,
+		pending.IP,
+		browserInfo,
+	)
+
+	keyboard := &InlineKeyboardMarkup{
+		InlineKeyboard: [][]InlineKeyboardButton{
+			{
+				{Text: "Разрешить", CallbackData: "auth_approve:" + hash},
+				{Text: "Отклонить", CallbackData: "auth_reject:" + hash},
+			},
+		},
+	}
+
+	b.sendMessageWithKeyboard(msg.Chat.ID, text, keyboard)
+}
+
+// parseUserAgent extracts browser/OS info from User-Agent
+func parseUserAgent(ua string) string {
+	switch {
+	case strings.Contains(ua, "Chrome") && !strings.Contains(ua, "Edg"):
+		if strings.Contains(ua, "Windows") {
+			return "Chrome (Windows)"
+		} else if strings.Contains(ua, "Mac") {
+			return "Chrome (macOS)"
+		} else if strings.Contains(ua, "Linux") {
+			return "Chrome (Linux)"
+		} else if strings.Contains(ua, "Android") {
+			return "Chrome (Android)"
+		}
+		return "Chrome"
+	case strings.Contains(ua, "Firefox"):
+		if strings.Contains(ua, "Windows") {
+			return "Firefox (Windows)"
+		} else if strings.Contains(ua, "Mac") {
+			return "Firefox (macOS)"
+		} else if strings.Contains(ua, "Linux") {
+			return "Firefox (Linux)"
+		}
+		return "Firefox"
+	case strings.Contains(ua, "Safari") && !strings.Contains(ua, "Chrome"):
+		if strings.Contains(ua, "iPhone") {
+			return "Safari (iPhone)"
+		} else if strings.Contains(ua, "iPad") {
+			return "Safari (iPad)"
+		}
+		return "Safari (macOS)"
+	case strings.Contains(ua, "Edg"):
+		return "Edge"
+	default:
+		if len(ua) > 50 {
+			return ua[:50] + "..."
+		}
+		if ua == "" {
+			return "Неизвестный браузер"
+		}
+		return ua
+	}
+}
+
+func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard *InlineKeyboardMarkup) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", b.token)
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         text,
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Failed to marshal message request: %v", err)
+		return
+	}
+
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error sending message with keyboard: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
+// handleCallbackQuery handles inline keyboard button presses
+func (b *Bot) handleCallbackQuery(cq *CallbackQuery) {
+	parts := strings.SplitN(cq.Data, ":", 2)
+	if len(parts) != 2 {
+		b.answerCallbackQuery(cq.ID, "Ошибка обработки", true)
+		return
+	}
+
+	action, hash := parts[0], parts[1]
+
+	switch action {
+	case "auth_approve":
+		b.handleAuthApprove(cq, hash)
+	case "auth_reject":
+		b.handleAuthReject(cq, hash)
+	default:
+		b.answerCallbackQuery(cq.ID, "Неизвестное действие", true)
+	}
+}
+
+func (b *Bot) handleAuthApprove(cq *CallbackQuery, hash string) {
+	photoURL := b.getUserAvatarURL(cq.From.ID)
+
+	if !b.pendingLogins.Approve(hash, cq.From.ID, cq.From.FirstName, cq.From.LastName, cq.From.Username, photoURL) {
+		b.answerCallbackQuery(cq.ID, "Ссылка истекла или уже использована", true)
+		if cq.Message != nil {
+			b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Ссылка для входа истекла.")
+		}
+		return
+	}
+
+	b.answerCallbackQuery(cq.ID, "Вход разрешён!", false)
+	if cq.Message != nil {
+		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Вход в GoPublic разрешён. Можете вернуться в браузер.")
+	}
+}
+
+func (b *Bot) handleAuthReject(cq *CallbackQuery, hash string) {
+	b.pendingLogins.Reject(hash)
+
+	b.answerCallbackQuery(cq.ID, "Вход отклонён", false)
+	if cq.Message != nil {
+		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Вход отклонён. Если это была попытка фишинга, будьте осторожны.")
+	}
+}
+
+func (b *Bot) answerCallbackQuery(queryID, text string, showAlert bool) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", b.token)
+
+	payload := map[string]interface{}{
+		"callback_query_id": queryID,
+		"text":              text,
+		"show_alert":        showAlert,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error answering callback query: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func (b *Bot) editMessageText(chatID int64, messageID int64, text string) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", b.token)
+
+	payload := map[string]interface{}{
+		"chat_id":    chatID,
+		"message_id": messageID,
+		"text":       text,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error editing message: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
+// getUserAvatarURL gets the user's profile photo URL
+func (b *Bot) getUserAvatarURL(userID int64) string {
+	photosURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUserProfilePhotos?user_id=%d&limit=1", b.token, userID)
+	resp, err := http.Get(photosURL)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var photosResp GetUserProfilePhotosResponse
+	if err := json.NewDecoder(resp.Body).Decode(&photosResp); err != nil || !photosResp.OK {
+		return ""
+	}
+
+	if photosResp.Result.TotalCount == 0 || len(photosResp.Result.Photos) == 0 {
+		return ""
+	}
+
+	photos := photosResp.Result.Photos[0]
+	if len(photos) == 0 {
+		return ""
+	}
+	fileID := photos[len(photos)-1].FileID
+
+	fileURL := fmt.Sprintf("https://api.telegram.org/bot%s/getFile?file_id=%s", b.token, fileID)
+	resp2, err := http.Get(fileURL)
+	if err != nil {
+		return ""
+	}
+	defer resp2.Body.Close()
+
+	var fileResp GetFileResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&fileResp); err != nil || !fileResp.OK {
+		return ""
+	}
+
+	return fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.token, fileResp.Result.FilePath)
 }
 
 // formatUserInfo formats user information for display
