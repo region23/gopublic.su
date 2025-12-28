@@ -445,7 +445,7 @@
 
                     <div id="auth-error" class="auth-state" style="display: none;">
                         <p class="error-text">Не удалось создать ссылку для входа</p>
-                        <button onclick="initTelegramAuth()" class="retry-btn">Попробовать снова</button>
+                        <button id="retry-btn" class="retry-btn">Попробовать снова</button>
                     </div>
                 </div>
                 {{end}}
@@ -596,6 +596,11 @@
     // Show 'waiting' state when user clicks the Telegram link
     document.getElementById('telegram-link').addEventListener('click', function() {
         showState('waiting');
+    });
+
+    // Retry button handler
+    document.getElementById('retry-btn').addEventListener('click', function() {
+        initTelegramAuth();
     });
 
     // ES modules are deferred by default, so DOM is ready
