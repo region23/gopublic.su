@@ -382,15 +382,21 @@ func escapeMarkdown(s string) string {
 
 // handleAuthStart handles /start command with auth hash
 func (b *Bot) handleAuthStart(msg *Message, hash string) {
+	log.Printf("Telegram bot: handleAuthStart called with hash=%s from user=%d", hash, msg.From.ID)
+
 	if msg.From == nil {
+		log.Printf("Telegram bot: handleAuthStart - msg.From is nil")
 		return
 	}
 
 	pending, ok := b.pendingLogins.Get(hash)
 	if !ok {
+		log.Printf("Telegram bot: handleAuthStart - hash not found in pending logins")
 		b.sendMessage(msg.Chat.ID, "Ссылка для входа недействительна или истекла.")
 		return
 	}
+
+	log.Printf("Telegram bot: handleAuthStart - found pending login, IP=%s, isLinking=%v", pending.IP, pending.IsLinking)
 
 	browserInfo := parseUserAgent(pending.UserAgent)
 
@@ -478,16 +484,21 @@ func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard *Inlin
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("Failed to marshal message request: %v", err)
+		log.Printf("Telegram bot: failed to marshal message request: %v", err)
 		return
 	}
 
+	log.Printf("Telegram bot: sending auth message to chat %d", chatID)
+
 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Error sending message with keyboard: %v", err)
+		log.Printf("Telegram bot: error sending message with keyboard: %v", err)
 		return
 	}
 	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("Telegram bot: sendMessageWithKeyboard response: status=%d, body=%s", resp.StatusCode, string(body))
 }
 
 // handleCallbackQuery handles inline keyboard button presses
