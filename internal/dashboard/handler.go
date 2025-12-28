@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gopublic/internal/auth"
+	"gopublic/internal/avatar"
 	"gopublic/internal/config"
 	"gopublic/internal/models"
 	"gopublic/internal/sentry"
@@ -268,7 +270,6 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 			FirstName:  firstName,
 			LastName:   lastName,
 			Username:   username,
-			PhotoURL:   photoURL,
 		}
 
 		// Generate domain names
@@ -292,6 +293,14 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 			return
 		}
 		user = createdUser
+
+		// Download and save avatar locally
+		if photoURL != "" {
+			if localURL := avatar.Download(user.ID, photoURL); localURL != "" {
+				user.PhotoURL = localURL
+				storage.UpdateUser(user)
+			}
+		}
 	} else if err != nil {
 		sentry.CaptureErrorWithContext(c, err, "Database error looking up user")
 		c.String(http.StatusInternalServerError, "Database error")
@@ -301,9 +310,14 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 		user.FirstName = firstName
 		user.LastName = lastName
 		user.Username = username
+
+		// Download and save avatar locally
 		if photoURL != "" {
-			user.PhotoURL = photoURL
+			if localURL := avatar.Download(user.ID, photoURL); localURL != "" {
+				user.PhotoURL = localURL
+			}
 		}
+
 		if err := storage.UpdateUser(user); err != nil {
 			sentry.CaptureErrorWithContext(c, err, "Failed to update user")
 			c.String(http.StatusInternalServerError, "Failed to update user")
@@ -749,7 +763,6 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 			FirstName: yandexUser.FirstName,
 			LastName:  yandexUser.LastName,
 			Username:  yandexUser.Login,
-			PhotoURL:  yandexUser.GetAvatarURL(),
 		}
 
 		// Generate domain names
@@ -773,6 +786,14 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 			return
 		}
 		user = createdUser
+
+		// Download and save avatar locally
+		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
+			if localURL := avatar.Download(user.ID, avatarURL); localURL != "" {
+				user.PhotoURL = localURL
+				storage.UpdateUser(user)
+			}
+		}
 	} else if err != nil {
 		sentry.CaptureErrorWithContext(c, err, "Database error looking up Yandex user")
 		c.String(http.StatusInternalServerError, "Database error")
@@ -785,9 +806,14 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 		if yandexUser.DefaultEmail != "" {
 			user.Email = yandexUser.DefaultEmail
 		}
+
+		// Download and save avatar locally
 		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
-			user.PhotoURL = avatarURL
+			if localURL := avatar.Download(user.ID, avatarURL); localURL != "" {
+				user.PhotoURL = localURL
+			}
 		}
+
 		if err := storage.UpdateUser(user); err != nil {
 			sentry.CaptureErrorWithContext(c, err, "Failed to update Yandex user")
 			c.String(http.StatusInternalServerError, "Failed to update user")
@@ -878,7 +904,6 @@ func (h *Handler) YandexTokenAuth(c *gin.Context) {
 			FirstName: yandexUser.FirstName,
 			LastName:  yandexUser.LastName,
 			Username:  yandexUser.Login,
-			PhotoURL:  yandexUser.GetAvatarURL(),
 		}
 
 		// Generate domain names
@@ -902,6 +927,14 @@ func (h *Handler) YandexTokenAuth(c *gin.Context) {
 			return
 		}
 		user = createdUser
+
+		// Download and save avatar locally
+		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
+			if localURL := avatar.Download(user.ID, avatarURL); localURL != "" {
+				user.PhotoURL = localURL
+				storage.UpdateUser(user)
+			}
+		}
 	} else if err != nil {
 		sentry.CaptureErrorWithContext(c, err, "Database error looking up Yandex user (SDK)")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
@@ -914,9 +947,14 @@ func (h *Handler) YandexTokenAuth(c *gin.Context) {
 		if yandexUser.DefaultEmail != "" {
 			user.Email = yandexUser.DefaultEmail
 		}
+
+		// Download and save avatar locally
 		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
-			user.PhotoURL = avatarURL
+			if localURL := avatar.Download(user.ID, avatarURL); localURL != "" {
+				user.PhotoURL = localURL
+			}
 		}
+
 		if err := storage.UpdateUser(user); err != nil {
 			sentry.CaptureErrorWithContext(c, err, "Failed to update Yandex user (SDK)")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
@@ -1007,8 +1045,12 @@ func (h *Handler) TelegramLinkCallback(c *gin.Context) {
 	if username := data.Get("username"); username != "" {
 		user.Username = username
 	}
+
+	// Download and save avatar locally
 	if photoURL := data.Get("photo_url"); photoURL != "" {
-		user.PhotoURL = photoURL
+		if localURL := avatar.Download(user.ID, photoURL); localURL != "" {
+			user.PhotoURL = localURL
+		}
 	}
 
 	if err := storage.UpdateUser(user); err != nil {
@@ -1115,13 +1157,12 @@ func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.Pen
 	user, err := storage.GetUserByTelegramID(login.TelegramID)
 
 	if err == storage.ErrNotFound {
-		// Create new user
+		// Create new user (without photo URL - we'll download it after)
 		newUser := &models.User{
 			TelegramID: &login.TelegramID,
 			FirstName:  login.FirstName,
 			LastName:   login.LastName,
 			Username:   login.Username,
-			PhotoURL:   login.PhotoURL,
 		}
 
 		// Generate domains
@@ -1144,6 +1185,14 @@ func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.Pen
 			return err
 		}
 		user = createdUser
+
+		// Download and save avatar locally (using DB user ID)
+		if login.PhotoURL != "" {
+			if localURL := avatar.Download(user.ID, login.PhotoURL); localURL != "" {
+				user.PhotoURL = localURL
+				storage.UpdateUser(user)
+			}
+		}
 	} else if err != nil {
 		sentry.CaptureErrorWithContext(c, err, "Database error looking up user")
 		return err
@@ -1152,9 +1201,14 @@ func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.Pen
 		user.FirstName = login.FirstName
 		user.LastName = login.LastName
 		user.Username = login.Username
+
+		// Download new avatar if provided
 		if login.PhotoURL != "" {
-			user.PhotoURL = login.PhotoURL
+			if localURL := avatar.Download(user.ID, login.PhotoURL); localURL != "" {
+				user.PhotoURL = localURL
+			}
 		}
+
 		if err := storage.UpdateUser(user); err != nil {
 			sentry.CaptureErrorWithContext(c, err, "Failed to update user")
 			return err
@@ -1188,9 +1242,52 @@ func (h *Handler) handleTelegramLinkFromBot(c *gin.Context, login *telegram.Pend
 	if login.Username != "" {
 		user.Username = login.Username
 	}
+
+	// Download and save avatar locally
 	if login.PhotoURL != "" {
-		user.PhotoURL = login.PhotoURL
+		if localURL := avatar.Download(user.ID, login.PhotoURL); localURL != "" {
+			user.PhotoURL = localURL
+		}
 	}
 
 	return storage.UpdateUser(user)
+}
+
+// ServeAvatar serves a user's avatar image from local storage.
+// URL format: /avatars/{user_id}.jpg
+func (h *Handler) ServeAvatar(c *gin.Context) {
+	// Extract filename from path (e.g., "123.jpg")
+	path := c.Request.URL.Path
+	filename := filepath.Base(path)
+
+	// Validate filename format
+	if !strings.HasSuffix(filename, ".jpg") {
+		c.String(http.StatusNotFound, "Not Found")
+		return
+	}
+
+	// Build full path
+	filePath := filepath.Join(avatar.AvatarDir, filename)
+
+	// Security: ensure we're not serving files outside avatar directory
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		c.String(http.StatusNotFound, "Not Found")
+		return
+	}
+	absAvatarDir, _ := filepath.Abs(avatar.AvatarDir)
+	if !strings.HasPrefix(absPath, absAvatarDir) {
+		c.String(http.StatusForbidden, "Forbidden")
+		return
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.String(http.StatusNotFound, "Not Found")
+		return
+	}
+
+	// Serve the file with caching headers
+	c.Header("Cache-Control", "public, max-age=86400") // 24 hours
+	c.File(filePath)
 }

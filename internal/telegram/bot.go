@@ -642,7 +642,7 @@ func (b *Bot) handleAuthApprove(cq *CallbackQuery, hash string) {
 	geoLocation := pending.GeoLocation
 	browserInfo := parseUserAgent(pending.UserAgent)
 
-	photoURL := b.getUserAvatarURL(cq.From.ID)
+	photoURL := b.getTelegramAvatarURL(cq.From.ID)
 
 	if !b.pendingLogins.Approve(hash, cq.From.ID, cq.From.FirstName, cq.From.LastName, cq.From.Username, photoURL) {
 		b.answerCallbackQuery(cq.ID, "Ссылка истекла или уже использована", true)
@@ -745,9 +745,11 @@ func (b *Bot) editMessageText(chatID int64, messageID int64, text string) {
 	defer resp.Body.Close()
 }
 
-// getUserAvatarURL gets the user's profile photo URL
-func (b *Bot) getUserAvatarURL(userID int64) string {
-	photosURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUserProfilePhotos?user_id=%d&limit=1", b.token, userID)
+// getTelegramAvatarURL gets the temporary download URL for a user's profile photo.
+// WARNING: This URL contains the bot token and should NEVER be exposed to clients.
+// Use avatar.Download() to save it locally before storing in the database.
+func (b *Bot) getTelegramAvatarURL(telegramUserID int64) string {
+	photosURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUserProfilePhotos?user_id=%d&limit=1", b.token, telegramUserID)
 	resp, err := http.Get(photosURL)
 	if err != nil {
 		return ""

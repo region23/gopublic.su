@@ -15,6 +15,7 @@ gopublic-client
 # Docker & Data
 data/
 certs/
+avatars/
 
 # Logs
 *.log
