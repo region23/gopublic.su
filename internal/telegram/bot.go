@@ -368,7 +368,7 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	log.Printf("Telegram bot: sendMessage response: status=%d, body=%s", resp.StatusCode, string(body)[:min(200, len(body))])
 }
 
-// escapeMarkdown escapes special Markdown characters
+// escapeMarkdown escapes special Markdown characters (for parse_mode=Markdown)
 func escapeMarkdown(s string) string {
 	replacer := strings.NewReplacer(
 		"_", "\\_",
@@ -376,6 +376,32 @@ func escapeMarkdown(s string) string {
 		"[", "\\[",
 		"]", "\\]",
 		"`", "\\`",
+	)
+	return replacer.Replace(s)
+}
+
+// escapeMarkdownV2 escapes special characters for MarkdownV2 parse mode
+func escapeMarkdownV2(s string) string {
+	// MarkdownV2 requires escaping: _ * [ ] ( ) ~ ` > # + - = | { } . !
+	replacer := strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
 	)
 	return replacer.Replace(s)
 }
@@ -524,6 +550,20 @@ func (b *Bot) handleCallbackQuery(cq *CallbackQuery) {
 }
 
 func (b *Bot) handleAuthApprove(cq *CallbackQuery, hash string) {
+	// Get pending login info before approving (for history message)
+	pending, ok := b.pendingLogins.Get(hash)
+	if !ok {
+		b.answerCallbackQuery(cq.ID, "Ссылка истекла или уже использована", true)
+		if cq.Message != nil {
+			b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Ссылка для входа истекла.")
+		}
+		return
+	}
+
+	// Save info before approve modifies/deletes it
+	ip := pending.IP
+	browserInfo := parseUserAgent(pending.UserAgent)
+
 	photoURL := b.getUserAvatarURL(cq.From.ID)
 
 	if !b.pendingLogins.Approve(hash, cq.From.ID, cq.From.FirstName, cq.From.LastName, cq.From.Username, photoURL) {
@@ -536,16 +576,42 @@ func (b *Bot) handleAuthApprove(cq *CallbackQuery, hash string) {
 
 	b.answerCallbackQuery(cq.ID, "Вход разрешён!", false)
 	if cq.Message != nil {
-		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Вход в GoPublic разрешён. Можете вернуться в браузер.")
+		msg := fmt.Sprintf(
+			"*✓ Вход разрешён*\n\n"+
+				">IP: %s\n"+
+				">Браузер: %s",
+			escapeMarkdownV2(ip), escapeMarkdownV2(browserInfo),
+		)
+		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, msg)
 	}
 }
 
 func (b *Bot) handleAuthReject(cq *CallbackQuery, hash string) {
+	// Get pending login info before rejecting (for history message)
+	pending, ok := b.pendingLogins.Get(hash)
+	var ip, browserInfo string
+	if ok {
+		ip = pending.IP
+		browserInfo = parseUserAgent(pending.UserAgent)
+	}
+
 	b.pendingLogins.Reject(hash)
 
 	b.answerCallbackQuery(cq.ID, "Вход отклонён", false)
 	if cq.Message != nil {
-		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, "Вход отклонён. Если это была попытка фишинга, будьте осторожны.")
+		var msg string
+		if ip != "" {
+			msg = fmt.Sprintf(
+				"*✗ Вход отклонён*\n\n"+
+					">IP: %s\n"+
+					">Браузер: %s\n\n"+
+					"_Если это была попытка фишинга — будьте осторожны_",
+				escapeMarkdownV2(ip), escapeMarkdownV2(browserInfo),
+			)
+		} else {
+			msg = "*✗ Вход отклонён*"
+		}
+		b.editMessageText(cq.Message.Chat.ID, cq.Message.MessageID, msg)
 	}
 }
 
@@ -574,6 +640,7 @@ func (b *Bot) editMessageText(chatID int64, messageID int64, text string) {
 		"chat_id":    chatID,
 		"message_id": messageID,
 		"text":       text,
+		"parse_mode": "MarkdownV2",
 	}
 
 	jsonData, _ := json.Marshal(payload)
