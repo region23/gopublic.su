@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,10 +16,13 @@ import (
 
 // Bot handles Telegram bot interactions for admin statistics
 type Bot struct {
-	token         string
-	adminID       int64
-	stopCh        chan struct{}
-	lastUpdateID  int64
+	token        string
+	adminID      int64
+	stopCh       chan struct{}
+	lastUpdateID int64
+	client       *http.Client
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 // NewBot creates a new Telegram bot instance
@@ -27,6 +31,9 @@ func NewBot(token string, adminID int64) *Bot {
 		token:   token,
 		adminID: adminID,
 		stopCh:  make(chan struct{}),
+		client: &http.Client{
+			Timeout: 35 * time.Second, // Slightly longer than Telegram's 30s long-polling timeout
+		},
 	}
 }
 
@@ -39,11 +46,15 @@ func (b *Bot) Start() {
 
 	log.Println("Starting Telegram admin bot...")
 
+	b.ctx, b.cancel = context.WithCancel(context.Background())
 	go b.pollUpdates()
 }
 
 // Stop gracefully stops the bot
 func (b *Bot) Stop() {
+	if b.cancel != nil {
+		b.cancel() // Cancel context to interrupt any in-flight HTTP requests
+	}
 	close(b.stopCh)
 }
 
@@ -88,10 +99,15 @@ func (b *Bot) pollUpdates() {
 		select {
 		case <-b.stopCh:
 			return
+		case <-b.ctx.Done():
+			return
 		case <-ticker.C:
 			updates, err := b.getUpdates()
 			if err != nil {
-				log.Printf("Error getting updates: %v", err)
+				// Don't log context cancellation errors during shutdown
+				if b.ctx.Err() == nil {
+					log.Printf("Error getting updates: %v", err)
+				}
 				continue
 			}
 
@@ -111,7 +127,12 @@ func (b *Bot) getUpdates() ([]Update, error) {
 
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?%s", b.token, params.Encode())
 
-	resp, err := http.Get(apiURL)
+	req, err := http.NewRequestWithContext(b.ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := b.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -232,9 +253,18 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	params.Set("text", text)
 	params.Set("parse_mode", "Markdown")
 
-	resp, err := http.PostForm(apiURL, params)
+	req, err := http.NewRequestWithContext(b.ctx, "POST", apiURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		log.Printf("Error sending message: %v", err)
+		log.Printf("Error creating request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		if b.ctx.Err() == nil {
+			log.Printf("Error sending message: %v", err)
+		}
 		return
 	}
 	defer resp.Body.Close()
