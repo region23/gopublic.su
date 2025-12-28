@@ -278,9 +278,11 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	params.Set("text", text)
 	params.Set("parse_mode", "Markdown")
 
+	log.Printf("Telegram bot: sending message to %d (len=%d)", chatID, len(text))
+
 	req, err := http.NewRequestWithContext(b.ctx, "POST", apiURL, strings.NewReader(params.Encode()))
 	if err != nil {
-		log.Printf("Error creating request: %v", err)
+		log.Printf("Telegram bot: error creating request: %v", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -288,11 +290,14 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	resp, err := b.client.Do(req)
 	if err != nil {
 		if b.ctx.Err() == nil {
-			log.Printf("Error sending message: %v", err)
+			log.Printf("Telegram bot: error sending message: %v", err)
 		}
 		return
 	}
 	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("Telegram bot: sendMessage response: status=%d, body=%s", resp.StatusCode, string(body)[:min(200, len(body))])
 }
 
 // formatUserInfo formats user information for display
