@@ -300,6 +300,18 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	log.Printf("Telegram bot: sendMessage response: status=%d, body=%s", resp.StatusCode, string(body)[:min(200, len(body))])
 }
 
+// escapeMarkdown escapes special Markdown characters
+func escapeMarkdown(s string) string {
+	replacer := strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"`", "\\`",
+	)
+	return replacer.Replace(s)
+}
+
 // formatUserInfo formats user information for display
 func formatUserInfo(u storage.UserStats) string {
 	var parts []string
@@ -307,24 +319,24 @@ func formatUserInfo(u storage.UserStats) string {
 	// Name
 	name := strings.TrimSpace(u.FirstName + " " + u.LastName)
 	if name != "" {
-		parts = append(parts, name)
+		parts = append(parts, escapeMarkdown(name))
 	}
 
 	// Username (Telegram or Yandex)
 	if u.Username != "" {
-		parts = append(parts, fmt.Sprintf("@%s", u.Username))
+		parts = append(parts, fmt.Sprintf("@%s", escapeMarkdown(u.Username)))
 	}
 
 	// Email
 	if u.Email != "" {
-		parts = append(parts, u.Email)
+		parts = append(parts, escapeMarkdown(u.Email))
 	}
 
 	// Identifiers
 	if u.TelegramID != nil {
 		parts = append(parts, fmt.Sprintf("TG:%d", *u.TelegramID))
 	} else if u.YandexID != nil {
-		parts = append(parts, fmt.Sprintf("Ya:%s", *u.YandexID))
+		parts = append(parts, fmt.Sprintf("Ya:%s", escapeMarkdown(*u.YandexID)))
 	}
 
 	if len(parts) == 0 {
