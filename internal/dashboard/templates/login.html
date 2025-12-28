@@ -491,9 +491,26 @@
     let currentHash = null;
     let pollInterval = null;
     let authTimeout = null;
+    let qrCodeLoaded = false;
+
+    // Wait for QRCode library to load
+    function waitForQRCode(callback) {
+        if (typeof QRCode !== 'undefined') {
+            qrCodeLoaded = true;
+            callback();
+        } else {
+            setTimeout(() => waitForQRCode(callback), 100);
+        }
+    }
 
     async function initTelegramAuth() {
         showState('loading');
+
+        // Wait for QRCode library if not loaded yet
+        if (!qrCodeLoaded) {
+            waitForQRCode(initTelegramAuth);
+            return;
+        }
 
         try {
             const response = await fetch('/api/telegram-auth/init');
