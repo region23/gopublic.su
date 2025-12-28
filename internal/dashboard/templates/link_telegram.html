@@ -406,43 +406,22 @@
     </div>
 
     {{if not .TelegramWidgetEnabled}}
-    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-    <script>
+    <script type="module">
+    import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
+
     let currentHash = null;
     let pollInterval = null;
     let authTimeout = null;
 
-    function generateQRCode(canvas, text) {
-        const qr = qrcode(0, 'M');
-        qr.addData(text);
-        qr.make();
-
-        const ctx = canvas.getContext('2d');
-        const cellSize = 5;
-        const margin = 10;
-        const size = qr.getModuleCount() * cellSize + margin * 2;
-
-        canvas.width = size;
-        canvas.height = size;
-
-        // Background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
-
-        // QR modules
-        ctx.fillStyle = '#0d7377';
-        for (let row = 0; row < qr.getModuleCount(); row++) {
-            for (let col = 0; col < qr.getModuleCount(); col++) {
-                if (qr.isDark(row, col)) {
-                    ctx.fillRect(
-                        col * cellSize + margin,
-                        row * cellSize + margin,
-                        cellSize,
-                        cellSize
-                    );
-                }
+    async function generateQRCode(canvas, text) {
+        await QRCode.toCanvas(canvas, text, {
+            width: 200,
+            margin: 2,
+            color: {
+                dark: '#0d7377',
+                light: '#ffffff'
             }
-        }
+        });
     }
 
     async function initTelegramAuth() {
@@ -459,7 +438,7 @@
 
             currentHash = data.hash;
 
-            generateQRCode(document.getElementById('qr-code'), data.deep_link);
+            await generateQRCode(document.getElementById('qr-code'), data.deep_link);
 
             document.getElementById('telegram-link').href = data.deep_link;
 
@@ -535,7 +514,8 @@
         document.getElementById('auth-error').style.display = state === 'error' ? 'block' : 'none';
     }
 
-    document.addEventListener('DOMContentLoaded', initTelegramAuth);
+    // ES modules are deferred by default, so DOM is ready
+    initTelegramAuth();
     </script>
     {{end}}
 </body>
