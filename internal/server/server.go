@@ -40,6 +40,9 @@ type Server struct {
 
 	// DailyBandwidthLimit is the daily bandwidth limit per user in bytes
 	DailyBandwidthLimit int64
+
+	// AdminTelegramID identifies admin user (no bandwidth limits).
+	AdminTelegramID int64
 }
 
 // NewServerWithConfig creates a new server with the given configuration.
@@ -55,6 +58,7 @@ func NewServerWithConfig(cfg *config.Config, registry *TunnelRegistry, tlsConfig
 		cancel:              cancel,
 		MaxConnections:      cfg.MaxConnections,
 		DailyBandwidthLimit: cfg.DailyBandwidthLimit,
+		AdminTelegramID:     cfg.AdminTelegramID,
 	}
 }
 
@@ -227,8 +231,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		s.UserSessions.Unregister(user.ID)
 	}
 
+	isAdmin := false
+	if s.AdminTelegramID != 0 && user.TelegramID != nil && *user.TelegramID == s.AdminTelegramID {
+		isAdmin = true
+	}
+
 	// 4. Process tunnel request and bind domains
-	boundDomains, err := s.processTunnelRequest(decoder, stream, session, user, conn.RemoteAddr().String())
+	boundDomains, err := s.processTunnelRequest(decoder, stream, session, user, conn.RemoteAddr().String(), isAdmin)
 	if err != nil {
 		sentry.CaptureErrorf(err, "Tunnel request failed for %s", conn.RemoteAddr())
 		session.Close()
@@ -239,7 +248,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	s.UserSessions.Register(user.ID, session, boundDomains)
 
 	// 6. Send success response
-	if err := s.sendSuccessResponse(stream, boundDomains, user.ID); err != nil {
+	if err := s.sendSuccessResponse(stream, boundDomains, user.ID, isAdmin); err != nil {
 		sentry.CaptureErrorf(err, "Failed to send success response to %s", conn.RemoteAddr())
 	}
 	log.Printf("Handshake complete for %s. Bound domains: %v", conn.RemoteAddr(), boundDomains)
@@ -299,7 +308,7 @@ func (s *Server) authenticate(decoder *json.Decoder, stream net.Conn, remoteAddr
 }
 
 // processTunnelRequest handles the tunnel request and binds domains.
-func (s *Server) processTunnelRequest(decoder *json.Decoder, stream net.Conn, session *yamux.Session, user *models.User, remoteAddr string) ([]string, error) {
+func (s *Server) processTunnelRequest(decoder *json.Decoder, stream net.Conn, session *yamux.Session, user *models.User, remoteAddr string, bandwidthExempt bool) ([]string, error) {
 	// Set read deadline for tunnel request
 	stream.SetReadDeadline(time.Now().Add(handshakeTimeout))
 
@@ -327,7 +336,7 @@ func (s *Server) processTunnelRequest(decoder *json.Decoder, stream net.Conn, se
 	}
 
 	// Bind domains
-	boundDomains := s.bindDomains(session, user.ID, requestedDomains)
+	boundDomains := s.bindDomains(session, user.ID, requestedDomains, bandwidthExempt)
 
 	if len(boundDomains) == 0 {
 		s.sendError(stream, "No valid domains requested or authorized")
@@ -338,7 +347,7 @@ func (s *Server) processTunnelRequest(decoder *json.Decoder, stream net.Conn, se
 }
 
 // bindDomains validates ownership and registers domains with the session.
-func (s *Server) bindDomains(session *yamux.Session, userID uint, requestedDomains []string) []string {
+func (s *Server) bindDomains(session *yamux.Session, userID uint, requestedDomains []string, bandwidthExempt bool) []string {
 	var boundDomains []string
 
 	for _, name := range requestedDomains {
@@ -361,7 +370,7 @@ func (s *Server) bindDomains(session *yamux.Session, userID uint, requestedDomai
 			regName = name + "." + s.RootDomain
 		}
 
-		s.Registry.Register(regName, session, userID)
+		s.Registry.Register(regName, session, userID, bandwidthExempt)
 		boundDomains = append(boundDomains, regName)
 		log.Printf("Successfully bound domain %s for user %d", regName, userID)
 	}
@@ -370,7 +379,7 @@ func (s *Server) bindDomains(session *yamux.Session, userID uint, requestedDomai
 }
 
 // sendSuccessResponse sends the handshake success response to the client.
-func (s *Server) sendSuccessResponse(stream net.Conn, boundDomains []string, userID uint) error {
+func (s *Server) sendSuccessResponse(stream net.Conn, boundDomains []string, userID uint, bandwidthExempt bool) error {
 	// Fetch bandwidth statistics for the user
 	bandwidthToday, _ := storage.GetUserBandwidthToday(userID)
 	bandwidthTotal, _ := storage.GetUserTotalBandwidth(userID)
@@ -381,7 +390,12 @@ func (s *Server) sendSuccessResponse(stream net.Conn, boundDomains []string, use
 		ServerStats: &protocol.ServerStats{
 			BandwidthToday: bandwidthToday,
 			BandwidthTotal: bandwidthTotal,
-			BandwidthLimit: s.DailyBandwidthLimit,
+			BandwidthLimit: func() int64 {
+				if bandwidthExempt {
+					return 0
+				}
+				return s.DailyBandwidthLimit
+			}(),
 		},
 	}
 	return json.NewEncoder(stream).Encode(resp)

@@ -215,6 +215,10 @@ func (h *Handler) Index(c *gin.Context) {
 	// Fetch bandwidth statistics
 	bandwidthToday, _ := storage.GetUserBandwidthToday(user.ID)
 	bandwidthTotal, _ := storage.GetUserTotalBandwidth(user.ID)
+	bandwidthLimit := h.DailyBandwidthLimit
+	if h.AdminTelegramID != 0 && user.TelegramID != nil && *user.TelegramID == h.AdminTelegramID {
+		bandwidthLimit = 0
+	}
 
 	// Check connection status
 	var isConnected bool
@@ -236,7 +240,7 @@ func (h *Handler) Index(c *gin.Context) {
 		"YandexEnabled":   h.YandexClientID != "" && h.YandexClientSecret != "",
 		"BandwidthToday":  bandwidthToday,
 		"BandwidthTotal":  bandwidthTotal,
-		"BandwidthLimit":  h.DailyBandwidthLimit,
+		"BandwidthLimit":  bandwidthLimit,
 		"IsConnected":     isConnected,
 		"ActiveDomains":   activeDomains,
 	})

@@ -376,10 +376,14 @@ func (t *Tunnel) proxyStream(remote net.Conn) {
 	}
 
 	// Publish request start event
-	t.publishEvent(events.EventRequestStart, events.RequestData{
-		Method: req.Method,
-		Path:   req.URL.Path,
-	})
+	if req.Header.Get("X-GoPublic-Control") == "bandwidth_exceeded" || strings.HasPrefix(req.URL.Path, "/__gopublic/control/") {
+		t.publishEvent(events.EventLog, events.LogData{Level: "warn", Message: "Дневной лимит трафика исчерпан: внешний URL тоннеля будет отдавать 429 до завтра."})
+		resp := &http.Response{StatusCode: http.StatusNoContent, Status: "204 No Content", Proto: "HTTP/1.1", ProtoMajor: 1, ProtoMinor: 1, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(nil))}
+		_ = resp.Write(remote)
+		return
+	}
+
+	t.publishEvent(events.EventRequestStart, events.RequestData{Method: req.Method, Path: req.URL.Path})
 
 	// Buffer request body for inspector (with error handling)
 	var reqBody []byte

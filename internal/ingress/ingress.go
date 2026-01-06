@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
@@ -42,6 +44,9 @@ type Ingress struct {
 	GitHubRepo          string // GitHub repo for client downloads (e.g., "username/gopublic")
 	DailyBandwidthLimit int64  // Daily bandwidth limit per user in bytes (0 = unlimited)
 	SentryEnabled       bool   // Whether Sentry is configured
+
+	quotaNotifyMu   sync.Mutex
+	quotaNotifiedAt map[uint]time.Time
 }
 
 // NewIngressWithConfig creates a new ingress with the given configuration.
@@ -56,6 +61,7 @@ func NewIngressWithConfig(cfg *config.Config, registry *server.TunnelRegistry, d
 		GitHubRepo:          cfg.GitHubRepo,
 		DailyBandwidthLimit: cfg.DailyBandwidthLimit,
 		SentryEnabled:       cfg.HasSentry(),
+		quotaNotifiedAt:     make(map[uint]time.Time),
 	}
 }
 
@@ -72,7 +78,41 @@ func NewIngress(port string, registry *server.TunnelRegistry, dash *dashboard.Ha
 		RootDomain:  os.Getenv("DOMAIN_NAME"),
 		ProjectName: projectName,
 		IsSecure:    false,
+		quotaNotifiedAt: make(map[uint]time.Time),
 	}
+}
+
+func (i *Ingress) maybeNotifyBandwidthExceeded(entry *server.TunnelEntry) {
+	if entry == nil || entry.Session == nil {
+		return
+	}
+	if i.DailyBandwidthLimit <= 0 {
+		return
+	}
+	if entry.BandwidthExempt {
+		return
+	}
+
+	shouldSend := false
+	now := time.Now()
+	i.quotaNotifyMu.Lock()
+	last, ok := i.quotaNotifiedAt[entry.UserID]
+	if !ok || now.Sub(last) > time.Minute {
+		i.quotaNotifiedAt[entry.UserID] = now
+		shouldSend = true
+	}
+	i.quotaNotifyMu.Unlock()
+	if !shouldSend {
+		return
+	}
+
+	stream, err := entry.Session.Open()
+	if err != nil {
+		return
+	}
+	defer stream.Close()
+
+	_, _ = fmt.Fprintf(stream, "GET /__gopublic/control/bandwidth_exceeded HTTP/1.1\r\nHost: gopublic-control\r\nX-GoPublic-Control: bandwidth_exceeded\r\nRetry-After: 86400\r\n\r\n")
 }
 
 func (i *Ingress) Handler() http.Handler {
@@ -453,6 +493,9 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	requestBytes := int64(reqBuf.Len())
 
 	consume := func(bytes int64) (bool, error) {
+		if entry.BandwidthExempt {
+			return true, nil
+		}
 		if i.DailyBandwidthLimit <= 0 || bytes <= 0 {
 			return true, nil
 		}
@@ -466,9 +509,10 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 	}
 
 	// Reserve quota for request bytes before opening the tunnel stream.
-	if i.DailyBandwidthLimit > 0 && requestBytes > 0 {
+	if !entry.BandwidthExempt && i.DailyBandwidthLimit > 0 && requestBytes > 0 {
 		allowed, _ := consume(requestBytes)
 		if !allowed {
+			i.maybeNotifyBandwidthExceeded(entry)
 			c.Header("Retry-After", "86400") // 24 hours
 			c.String(http.StatusTooManyRequests, "Daily bandwidth limit exceeded. Please try again tomorrow.")
 			return
@@ -557,7 +601,13 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 			defer clientConn.Close()
 
 			// Now do bidirectional copy between clientConn and stream (via peekReader)
-			_ = copyBidirectionalWithReaderCharging(clientConn, stream, peekReader, consume)
+			_ = copyBidirectionalWithReaderCharging(clientConn, stream, peekReader, func(b int64) (bool, error) {
+				allowed, err := consume(b)
+				if !allowed {
+					i.maybeNotifyBandwidthExceeded(entry)
+				}
+				return allowed, err
+			})
 		} else {
 			// Upgrade failed (non-101 response), handle as normal HTTP
 			// Re-read response properly from peekReader
@@ -585,7 +635,13 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 					_ = stream.Close()
 				})
 			}
-			cw := &bandwidthChargingWriter{w: c.Writer, consume: consume, onLimit: closeUpstream}
+			cw := &bandwidthChargingWriter{w: c.Writer, consume: func(b int64) (bool, error) {
+				allowed, err := consume(b)
+				if !allowed {
+					i.maybeNotifyBandwidthExceeded(entry)
+				}
+				return allowed, err
+			}, onLimit: closeUpstream}
 			_, _ = io.Copy(cw, resp.Body)
 		}
 	} else {
@@ -614,7 +670,13 @@ func (i *Ingress) proxyToTunnel(c *gin.Context, host string) {
 				_ = stream.Close()
 			})
 		}
-		cw := &bandwidthChargingWriter{w: c.Writer, consume: consume, onLimit: closeUpstream}
+		cw := &bandwidthChargingWriter{w: c.Writer, consume: func(b int64) (bool, error) {
+			allowed, err := consume(b)
+			if !allowed {
+				i.maybeNotifyBandwidthExceeded(entry)
+			}
+			return allowed, err
+		}, onLimit: closeUpstream}
 		_, _ = io.Copy(cw, resp.Body)
 	}
 }

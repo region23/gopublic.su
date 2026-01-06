@@ -10,6 +10,8 @@ import (
 type TunnelEntry struct {
 	Session *yamux.Session
 	UserID  uint
+	// BandwidthExempt disables bandwidth limits for this tunnel's user.
+	BandwidthExempt bool
 }
 
 // TunnelRegistry manages the mapping between hostnames and active Yamux sessions.
@@ -25,12 +27,13 @@ func NewTunnelRegistry() *TunnelRegistry {
 }
 
 // Register maps a hostname to a session with user ID.
-func (r *TunnelRegistry) Register(hostname string, session *yamux.Session, userID uint) {
+func (r *TunnelRegistry) Register(hostname string, session *yamux.Session, userID uint, bandwidthExempt bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.sessions[hostname] = &TunnelEntry{
 		Session: session,
 		UserID:  userID,
+		BandwidthExempt: bandwidthExempt,
 	}
 }
 
