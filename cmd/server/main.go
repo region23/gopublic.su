@@ -137,6 +137,10 @@ func main() {
 			Addr:      ":443",
 			Handler:   ing.Handler(),
 			TLSConfig: tlsConfig,
+			// WebSocket upgrades require connection hijacking, which is not supported
+			// when the request is served over HTTP/2. Disable HTTP/2 to ensure
+			// WebSocket-based features (e.g. Next.js HMR at /_next/webpack-hmr) work.
+			TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){},
 		}
 		httpServers = append(httpServers, httpsServer)
 
