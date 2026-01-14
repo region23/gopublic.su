@@ -13,8 +13,10 @@ import (
 // ignoredErrors contains error messages that should be logged but not sent to Sentry.
 // These are typically caused by bots/scanners and create noise.
 var ignoredErrors = []string{
-	"acme/autocert: missing server name",            // TLS connections without SNI (bots scanning port 4443)
+	"acme/autocert: missing server name",              // TLS connections without SNI (bots scanning port 4443)
 	"first record does not look like a TLS handshake", // Plain TCP connections to TLS port (bots/scanners)
+	"tls: unsupported SSLv2 handshake received",       // Ancient/invalid handshake (usually scanners)
+	"host not configured",                             // TLS SNI is not covered by autocert HostPolicy
 }
 
 // shouldIgnore checks if an error should be filtered out from Sentry.
@@ -22,6 +24,13 @@ func shouldIgnore(err error) bool {
 	if err == nil {
 		return true
 	}
+
+	// Treat socket timeouts as noise: scanners often connect and never speak.
+	type timeoutError interface{ Timeout() bool }
+	if te, ok := err.(timeoutError); ok && te.Timeout() {
+		return true
+	}
+
 	errStr := err.Error()
 	for _, ignored := range ignoredErrors {
 		if strings.Contains(errStr, ignored) {
@@ -54,6 +63,21 @@ func CaptureErrorWithContext(c *gin.Context, err error, message string) {
 	if hub := sentrygin.GetHubFromContext(c); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetExtra("message", message)
+			// Helpful request diagnostics without dumping sensitive headers.
+			if c != nil && c.Request != nil {
+				scope.SetTag("http.method", c.Request.Method)
+				scope.SetTag("http.host", c.Request.Host)
+				scope.SetTag("http.path", c.Request.URL.Path)
+				scope.SetExtra("http.query", c.Request.URL.RawQuery)
+				scope.SetExtra("http.remote_ip", c.ClientIP())
+				scope.SetExtra("http.user_agent", c.Request.UserAgent())
+				scope.SetExtra("http.referer", c.Request.Referer())
+				scope.SetExtra("http.upgrade", c.Request.Header.Get("Upgrade"))
+				scope.SetExtra("http.connection", c.Request.Header.Get("Connection"))
+				if rid := c.Request.Header.Get("X-Request-Id"); rid != "" {
+					scope.SetTag("request_id", rid)
+				}
+			}
 			hub.CaptureException(err)
 		})
 	} else {
