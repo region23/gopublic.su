@@ -200,9 +200,13 @@ func (t *Tunnel) handleSession(conn net.Conn, connectStart time.Time) error {
 	}
 	t.mu.Unlock()
 
-	// Start Yamux Client
+	// Start Yamux Client with custom config for better sleep/wake detection
 	t.publishStatus("yamux_init", "Initializing multiplexed connection...")
-	session, err := yamux.Client(conn, nil)
+	yamuxConfig := yamux.DefaultConfig()
+	yamuxConfig.EnableKeepAlive = true
+	yamuxConfig.KeepAliveInterval = 10 * time.Second // More frequent keepalives for faster disconnect detection
+	yamuxConfig.ConnectionWriteTimeout = 5 * time.Second
+	session, err := yamux.Client(conn, yamuxConfig)
 	if err != nil {
 		t.publishStatus("error", fmt.Sprintf("Failed to init yamux: %v", err))
 		return fmt.Errorf("failed to start yamux: %v", err)
@@ -315,6 +319,32 @@ func (t *Tunnel) handleSession(conn net.Conn, connectStart time.Time) error {
 	}
 
 	stream.Close() // Handshake done
+
+	// Start sleep/wake detection goroutine
+	// This detects when the machine wakes from sleep and proactively closes the stale connection
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		lastTick := time.Now()
+		const sleepThreshold = 15 * time.Second // If more than 15s passed, assume sleep occurred
+
+		for {
+			select {
+			case now := <-ticker.C:
+				elapsed := now.Sub(lastTick)
+				if elapsed > sleepThreshold {
+					// Machine likely woke from sleep - connection is probably dead
+					logger.Info("Sleep detected (%.1fs gap), closing stale connection for reconnect", elapsed.Seconds())
+					t.publishStatus("sleep_detected", "Woke from sleep, reconnecting...")
+					session.Close()
+					return
+				}
+				lastTick = now
+			case <-session.CloseChan():
+				return
+			}
+		}
+	}()
 
 	// Accept Streams with proper tracking
 	for {

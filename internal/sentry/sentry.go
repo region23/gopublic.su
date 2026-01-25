@@ -11,12 +11,16 @@ import (
 )
 
 // ignoredErrors contains error messages that should be logged but not sent to Sentry.
-// These are typically caused by bots/scanners and create noise.
+// These are typically caused by bots/scanners or normal client disconnects and create noise.
 var ignoredErrors = []string{
 	"acme/autocert: missing server name",              // TLS connections without SNI (bots scanning port 4443)
 	"first record does not look like a TLS handshake", // Plain TCP connections to TLS port (bots/scanners)
 	"tls: unsupported SSLv2 handshake received",       // Ancient/invalid handshake (usually scanners)
 	"host not configured",                             // TLS SNI is not covered by autocert HostPolicy
+	"connection reset by peer",                        // Client disconnected abruptly (sleep mode, network loss)
+	"EOF",                                             // Client closed connection without graceful shutdown
+	"broken pipe",                                     // Write to closed connection (client already gone)
+	"use of closed network connection",                // Operation on already closed connection
 }
 
 // shouldIgnore checks if an error should be filtered out from Sentry.
