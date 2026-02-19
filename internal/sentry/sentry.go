@@ -21,6 +21,7 @@ var ignoredErrors = []string{
 	"EOF",                                             // Client closed connection without graceful shutdown
 	"broken pipe",                                     // Write to closed connection (client already gone)
 	"use of closed network connection",                // Operation on already closed connection
+	"invalid protocol version",                        // yamux: scanner/bot or outdated CLI client (pre-yamux)
 }
 
 // shouldIgnore checks if an error should be filtered out from Sentry.

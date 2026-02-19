@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -196,6 +197,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// 1. Setup yamux session
 	session, stream, err := s.setupYamuxSession(conn)
 	if err != nil {
+		// "invalid protocol version" means the peer did not speak the yamux protocol at all.
+		// This is expected noise from port scanners and outdated CLI clients (built before
+		// yamux was introduced). Log as a warning and skip Sentry to avoid alert fatigue.
+		if strings.Contains(err.Error(), "invalid protocol version") {
+			log.Printf("WARN: rejected connection from %s: incompatible protocol (scanner or outdated client)", conn.RemoteAddr())
+			return
+		}
 		sentry.CaptureErrorf(err, "Session setup failed for %s", conn.RemoteAddr())
 		return
 	}
