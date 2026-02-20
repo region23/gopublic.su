@@ -187,6 +187,12 @@ func (i *Ingress) Handler() http.Handler {
 		log.Printf("Failed to load templates: %v", err)
 	}
 
+	// Register /metrics as a direct gin route so it's reachable on any host
+	// (app.domain, root domain, etc.) without relying on NoRoute dispatch.
+	if i.DashHandler.AppMetrics != nil {
+		r.GET("/metrics", i.DashHandler.Metrics)
+	}
+
 	// Catch-all handler for Tunnels (and Landing Page)
 	r.NoRoute(i.handleRequest)
 	return r
