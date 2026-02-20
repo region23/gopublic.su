@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"gopublic/internal/config"
+	"gopublic/internal/metrics"
 	"gopublic/internal/models"
 	"gopublic/internal/sentry"
 	"gopublic/internal/storage"
@@ -44,6 +45,9 @@ type Server struct {
 
 	// AdminTelegramID identifies admin user (no bandwidth limits).
 	AdminTelegramID int64
+
+	// AppMetrics tracks tunnel connection metrics.
+	AppMetrics *metrics.AppMetrics
 }
 
 // NewServerWithConfig creates a new server with the given configuration.
@@ -215,6 +219,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	user, force, err := s.authenticate(decoder, stream, conn.RemoteAddr().String())
 	if err != nil {
 		sentry.CaptureErrorf(err, "Authentication failed for %s", conn.RemoteAddr())
+		if s.AppMetrics != nil {
+			s.AppMetrics.TunnelError()
+		}
 		session.Close()
 		return
 	}
@@ -248,12 +255,20 @@ func (s *Server) handleConnection(conn net.Conn) {
 	boundDomains, err := s.processTunnelRequest(decoder, stream, session, user, conn.RemoteAddr().String(), isAdmin)
 	if err != nil {
 		sentry.CaptureErrorf(err, "Tunnel request failed for %s", conn.RemoteAddr())
+		if s.AppMetrics != nil {
+			s.AppMetrics.TunnelError()
+		}
 		session.Close()
 		return
 	}
 
 	// 5. Register user session
 	s.UserSessions.Register(user.ID, session, boundDomains)
+
+	// Track tunnel connection in metrics
+	if s.AppMetrics != nil {
+		s.AppMetrics.TunnelConnected()
+	}
 
 	// 6. Send success response
 	if err := s.sendSuccessResponse(stream, boundDomains, user.ID, isAdmin); err != nil {
@@ -418,6 +433,9 @@ func (s *Server) monitorSession(session *yamux.Session, userID uint, boundDomain
 			s.Registry.Unregister(d)
 		}
 		s.UserSessions.Unregister(userID)
+		if s.AppMetrics != nil {
+			s.AppMetrics.TunnelDisconnected()
+		}
 	}()
 }
 

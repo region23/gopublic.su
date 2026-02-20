@@ -26,6 +26,7 @@ import (
 	"gopublic/internal/auth"
 	"gopublic/internal/avatar"
 	"gopublic/internal/config"
+	"gopublic/internal/metrics"
 	"gopublic/internal/models"
 	"gopublic/internal/sentry"
 	"gopublic/internal/storage"
@@ -57,6 +58,8 @@ type Handler struct {
 	UserSessions          UserSessionProvider // Optional: provides active session info
 	TelegramBot           *telegram.Bot       // Telegram bot for auth
 	TelegramWidgetEnabled bool                // If true, use legacy Telegram Login Widget
+	AppMetrics            *metrics.AppMetrics // Optional: Prometheus metrics
+	MetricsToken          string              // Optional: Bearer token for /metrics endpoint
 }
 
 // SetUserSessions sets the user session provider for displaying connection status.
@@ -162,6 +165,10 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	g.GET("/login", h.Login)
 	g.GET("/auth/telegram", h.TelegramCallback)
 	g.GET("/logout", h.Logout)
+
+	if h.AppMetrics != nil {
+		g.GET("/metrics", h.Metrics)
+	}
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -297,6 +304,9 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 			return
 		}
 		user = createdUser
+		if h.AppMetrics != nil {
+			h.AppMetrics.UserCreated()
+		}
 
 		// Download and save avatar locally
 		if photoURL != "" {
@@ -790,6 +800,9 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 			return
 		}
 		user = createdUser
+		if h.AppMetrics != nil {
+			h.AppMetrics.UserCreated()
+		}
 
 		// Download and save avatar locally
 		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
@@ -931,6 +944,9 @@ func (h *Handler) YandexTokenAuth(c *gin.Context) {
 			return
 		}
 		user = createdUser
+		if h.AppMetrics != nil {
+			h.AppMetrics.UserCreated()
+		}
 
 		// Download and save avatar locally
 		if avatarURL := yandexUser.GetAvatarURL(); avatarURL != "" {
@@ -1189,6 +1205,9 @@ func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.Pen
 			return err
 		}
 		user = createdUser
+		if h.AppMetrics != nil {
+			h.AppMetrics.UserCreated()
+		}
 
 		// Download and save avatar locally (using DB user ID)
 		if login.PhotoURL != "" {
@@ -1294,4 +1313,23 @@ func (h *Handler) ServeAvatar(c *gin.Context) {
 	// Serve the file with caching headers
 	c.Header("Cache-Control", "public, max-age=86400") // 24 hours
 	c.File(filePath)
+}
+
+// Metrics serves the Prometheus metrics endpoint.
+func (h *Handler) Metrics(c *gin.Context) {
+	if h.AppMetrics == nil {
+		c.String(http.StatusNotFound, "Metrics not configured")
+		return
+	}
+
+	// Check Bearer token if configured
+	if h.MetricsToken != "" {
+		auth := c.GetHeader("Authorization")
+		if auth != "Bearer "+h.MetricsToken {
+			c.String(http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+	}
+
+	h.AppMetrics.Handler()(c)
 }

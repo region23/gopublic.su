@@ -464,6 +464,8 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 		} else {
 			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
 		}
+	case "/metrics":
+		i.DashHandler.Metrics(c)
 	default:
 		// Serve avatar files
 		if strings.HasPrefix(c.Request.URL.Path, "/avatars/") {
