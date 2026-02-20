@@ -13,6 +13,9 @@ type AppMetrics struct {
 	TunnelConnections *Counter
 	TunnelErrors      *Counter
 
+	// User metrics
+	UsersTotal *Gauge
+
 	// HTTP metrics
 	RequestsTotal   *Counter
 	RequestDuration *Histogram
@@ -44,6 +47,12 @@ func NewAppMetrics() *AppMetrics {
 		TunnelErrors: m.NewCounter(
 			"gopublic_tunnel_errors_total",
 			"Total number of tunnel connection errors",
+			nil,
+		),
+
+		UsersTotal: m.NewGauge(
+			"gopublic_users_total",
+			"Total number of registered users",
 			nil,
 		),
 
@@ -115,6 +124,16 @@ func (am *AppMetrics) TunnelDisconnected() {
 // TunnelError should be called when a tunnel error occurs.
 func (am *AppMetrics) TunnelError() {
 	am.TunnelErrors.Inc()
+}
+
+// SetUsersTotal sets the total users gauge to an absolute value.
+func (am *AppMetrics) SetUsersTotal(n float64) {
+	am.UsersTotal.Set(n)
+}
+
+// UserCreated should be called when a new user is registered.
+func (am *AppMetrics) UserCreated() {
+	am.UsersTotal.Inc()
 }
 
 func statusCodeToString(code int) string {

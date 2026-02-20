@@ -41,6 +41,9 @@ type Config struct {
 	// GitHub repository for client downloads (e.g., "username/gopublic")
 	GitHubRepo string
 
+	// Metrics endpoint bearer token (empty = no auth required)
+	MetricsToken string
+
 	// Number of domains to assign per new user (default: 2)
 	DomainsPerUser int
 
@@ -111,6 +114,7 @@ func LoadFromEnv() (*Config, error) {
 		SentryEnvironment:     getEnvOrDefault("SENTRY_ENVIRONMENT", "development"),
 		SentrySampleRate:      sentrySampleRate,
 		GitHubRepo:            os.Getenv("GITHUB_REPO"),
+		MetricsToken:          os.Getenv("METRICS_TOKEN"),
 		DomainsPerUser:        domainsPerUser,
 		DailyBandwidthLimit:   dailyBandwidthLimit,
 	}

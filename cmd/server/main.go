@@ -19,6 +19,7 @@ import (
 	"gopublic/internal/config"
 	"gopublic/internal/dashboard"
 	"gopublic/internal/ingress"
+	"gopublic/internal/metrics"
 	"gopublic/internal/server"
 	"gopublic/internal/storage"
 	"gopublic/internal/telegram"
@@ -69,11 +70,19 @@ func main() {
 	// 3. Initialize Registry
 	registry := server.NewTunnelRegistry()
 
+	// 3.5 Initialize Metrics
+	appMetrics := metrics.NewAppMetrics()
+	if userCount, err := storage.GetTotalUserCount(); err == nil {
+		appMetrics.SetUsersTotal(float64(userCount))
+	}
+
 	// 4. Initialize Dashboard
 	dashHandler, err := dashboard.NewHandlerWithConfig(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize dashboard: %v", err)
 	}
+	dashHandler.AppMetrics = appMetrics
+	dashHandler.MetricsToken = cfg.MetricsToken
 
 	// 5. Start Telegram Bot (for admin commands and auth)
 	var telegramBot *telegram.Bot
@@ -114,6 +123,7 @@ func main() {
 
 	// 7. Start Control Plane
 	controlPlane := server.NewServerWithConfig(cfg, registry, tlsConfig)
+	controlPlane.AppMetrics = appMetrics
 
 	// Connect dashboard to user sessions for connection status display
 	dashHandler.SetUserSessions(controlPlane.UserSessions)
