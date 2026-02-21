@@ -239,7 +239,11 @@ func (s *SQLiteStore) ValidateDomainOwnership(domainName string, userID uint) (b
 }
 
 func (s *SQLiteStore) CreateDomain(domain *models.Domain) error {
-	return s.db.Create(domain).Error
+	err := s.db.Create(domain).Error
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		return ErrDuplicateKey
+	}
+	return err
 }
 
 // --- Abuse Report Operations ---
@@ -449,6 +453,9 @@ func (s *SQLiteStore) CreateUserWithTokenAndDomains(reg UserRegistration) (*mode
 		for _, name := range reg.Domains {
 			domain := models.Domain{Name: name, UserID: reg.User.ID}
 			if err := tx.Create(&domain).Error; err != nil {
+				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+					return ErrDuplicateKey
+				}
 				return err
 			}
 		}
