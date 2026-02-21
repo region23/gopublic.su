@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -288,7 +287,7 @@ func (h *Handler) TelegramCallback(c *gin.Context) {
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
 		var domains []string
 		for i := 0; i < h.DomainsPerUser; i++ {
-			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			name := generateDomainName(prefixes[i%len(prefixes)], suffixes[i%len(suffixes)])
 			domains = append(domains, name)
 		}
 
@@ -627,6 +626,15 @@ func generateState() string {
 	return base64.URLEncoding.EncodeToString(b)
 }
 
+// generateDomainName generates a unique domain slug using a cryptographically random suffix.
+// Format: <prefix>-<suffix>-<6-hex-chars>, e.g. "misty-river-3f7a2c".
+// This avoids collisions that occurred when using time.Unix()%1000.
+func generateDomainName(prefix, suffix string) string {
+	b := make([]byte, 3)
+	rand.Read(b)
+	return fmt.Sprintf("%s-%s-%s", prefix, suffix, hex.EncodeToString(b))
+}
+
 // YandexAuth initiates Yandex OAuth flow
 func (h *Handler) YandexAuth(c *gin.Context) {
 	if h.YandexClientID == "" {
@@ -784,7 +792,7 @@ func (h *Handler) YandexCallback(c *gin.Context) {
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
 		var domains []string
 		for i := 0; i < h.DomainsPerUser; i++ {
-			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			name := generateDomainName(prefixes[i%len(prefixes)], suffixes[i%len(suffixes)])
 			domains = append(domains, name)
 		}
 
@@ -928,7 +936,7 @@ func (h *Handler) YandexTokenAuth(c *gin.Context) {
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
 		var domains []string
 		for i := 0; i < h.DomainsPerUser; i++ {
-			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			name := generateDomainName(prefixes[i%len(prefixes)], suffixes[i%len(suffixes)])
 			domains = append(domains, name)
 		}
 
@@ -1190,7 +1198,7 @@ func (h *Handler) handleTelegramLoginFromBot(c *gin.Context, login *telegram.Pen
 		suffixes := []string{"river", "star", "eagle", "bear", "fox"}
 		var domains []string
 		for i := 0; i < h.DomainsPerUser; i++ {
-			name := fmt.Sprintf("%s-%s-%d", prefixes[i%len(prefixes)], suffixes[i%len(suffixes)], time.Now().Unix()%1000+int64(i))
+			name := generateDomainName(prefixes[i%len(prefixes)], suffixes[i%len(suffixes)])
 			domains = append(domains, name)
 		}
 
