@@ -387,6 +387,39 @@ func (h *Handler) RegenerateToken(c *gin.Context) {
 	})
 }
 
+// BandwidthStats handles GET /api/bandwidth - returns current bandwidth usage as JSON.
+// Used by the dashboard for live polling without full page reload.
+func (h *Handler) BandwidthStats(c *gin.Context) {
+	user, err := h.getUserFromSession(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	bandwidthToday, _ := storage.GetUserBandwidthToday(user.ID)
+	bandwidthTotal, _ := storage.GetUserTotalBandwidth(user.ID)
+	bandwidthLimit := h.DailyBandwidthLimit
+	// Admin has unlimited bandwidth
+	if h.AdminTelegramID != 0 && user.TelegramID != nil && *user.TelegramID == h.AdminTelegramID {
+		bandwidthLimit = 0
+	}
+
+	var percent int
+	if bandwidthLimit > 0 {
+		percent = int(bandwidthToday * 100 / bandwidthLimit)
+		if percent > 100 {
+			percent = 100
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bandwidth_today": bandwidthToday,
+		"bandwidth_total": bandwidthTotal,
+		"bandwidth_limit": bandwidthLimit,
+		"percent":         percent,
+	})
+}
+
 func (h *Handler) getUserFromSession(c *gin.Context) (*models.User, error) {
 	session, err := h.Session.GetSession(c.Request)
 	if err != nil {

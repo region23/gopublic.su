@@ -1000,11 +1000,11 @@
             </div>
             <div class="header-user">
                 <div class="header-bandwidth" title="Трафик сегодня">
-                    <span class="bandwidth-used">{{formatBytes .BandwidthToday}}</span>
+                    <span class="bandwidth-used" id="bw-used-header">{{formatBytes .BandwidthToday}}</span>
                     <span>/</span>
-                    <span>{{formatBytes .BandwidthLimit}}</span>
+                    <span id="bw-limit-header">{{formatBytes .BandwidthLimit}}</span>
                     <div class="bandwidth-bar">
-                        <div class="bandwidth-fill" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
+                        <div class="bandwidth-fill" id="bw-fill-header" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
                     </div>
                 </div>
                 <div class="user-badge">
@@ -1212,15 +1212,15 @@ tunnels:
                 <p class="config-description" style="margin-bottom: 1rem;"><strong>Статистика трафика</strong></p>
                 <div class="stats-grid">
                     <div class="stat-item">
-                        <div class="stat-value">{{formatBytes .BandwidthToday}}</div>
+                        <div class="stat-value" id="bw-used-stats">{{formatBytes .BandwidthToday}}</div>
                         <div class="stat-label">Использовано сегодня</div>
-                        <div class="stat-limit">из {{formatBytes .BandwidthLimit}}</div>
+                        <div class="stat-limit" id="bw-limit-stats">из {{formatBytes .BandwidthLimit}}</div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
+                            <div class="progress-fill" id="bw-fill-stats" style="width: {{bandwidthPercent .BandwidthToday .BandwidthLimit}}%"></div>
                         </div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-value">{{formatBytes .BandwidthTotal}}</div>
+                        <div class="stat-value" id="bw-total-stats">{{formatBytes .BandwidthTotal}}</div>
                         <div class="stat-label">Всего за всё время</div>
                     </div>
                 </div>
@@ -1557,5 +1557,43 @@ tunnels:
         }
     </script>
     {{end}}
+
+    <!-- Live bandwidth polling -->
+    <script>
+    (function() {
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            var k = 1024;
+            var sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            var i = Math.floor(Math.log(bytes) / Math.log(k));
+            return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+        }
+
+        function updateBandwidth() {
+            fetch('/api/bandwidth', { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(d) {
+                    if (!d) return;
+                    var usedStr  = formatBytes(d.bandwidth_today);
+                    var limitStr = formatBytes(d.bandwidth_limit);
+                    var totalStr = formatBytes(d.bandwidth_total);
+                    var pct      = d.percent || 0;
+
+                    var e;
+                    if ((e = document.getElementById('bw-used-header')))  e.textContent = usedStr;
+                    if ((e = document.getElementById('bw-limit-header'))) e.textContent = d.bandwidth_limit > 0 ? limitStr : '∞';
+                    if ((e = document.getElementById('bw-fill-header')))  e.style.width  = pct + '%';
+                    if ((e = document.getElementById('bw-used-stats')))   e.textContent = usedStr;
+                    if ((e = document.getElementById('bw-limit-stats')))  e.textContent = d.bandwidth_limit > 0 ? 'из ' + limitStr : '';
+                    if ((e = document.getElementById('bw-fill-stats')))   e.style.width  = pct + '%';
+                    if ((e = document.getElementById('bw-total-stats')))  e.textContent = totalStr;
+                })
+                .catch(function() {}); // silent — stay with server-rendered values on error
+        }
+
+        // Poll every 10 seconds
+        setInterval(updateBandwidth, 10000);
+    })();
+    </script>
 </body>
 </html>
