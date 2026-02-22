@@ -371,3 +371,23 @@ func TestTLSConfig(t *testing.T) {
 		t.Errorf("expected secure.example.com, got %s", cfg.ServerName)
 	}
 }
+
+func TestResolveLocalAddr(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"3000", "localhost:3000"},
+		{"8080", "localhost:8080"},
+		{"example.test:80", "example.test:80"},
+		{"127.0.0.1:3000", "127.0.0.1:3000"},
+		{"myapp.local:8888", "myapp.local:8888"},
+	}
+
+	for _, tt := range tests {
+		got := resolveLocalAddr(tt.input)
+		if got != tt.want {
+			t.Errorf("resolveLocalAddr(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

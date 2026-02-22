@@ -452,7 +452,11 @@ func (m Model) renderForwarding() string {
 			}
 
 			url := fmt.Sprintf("%s://%s", t.Scheme, domain)
-			local := fmt.Sprintf("http://localhost:%s", t.LocalPort)
+			localAddr := t.LocalPort
+			if !strings.Contains(localAddr, ":") {
+				localAddr = "localhost:" + localAddr
+			}
+			local := fmt.Sprintf("http://%s", localAddr)
 
 			value := urlStyle.Render(url) + arrowStyle.Render(" -> ") + valueStyle.Render(local)
 			lines = append(lines, labelStyle.Render(label)+value)

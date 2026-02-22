@@ -390,10 +390,11 @@ func (st *SharedTunnel) proxyStream(remote net.Conn) {
 		return
 	}
 
-	// Dial local port
-	local, err := net.Dial("tcp", "localhost:"+localPort)
+	// Dial local port (localPort may be "port" or "host:port")
+	localAddr := resolveLocalAddr(localPort)
+	local, err := net.Dial("tcp", localAddr)
 	if err != nil {
-		friendlyMsg := formatLocalDialError(localPort, err)
+		friendlyMsg := formatLocalDialError(localAddr, err)
 		logger.Error("%s", friendlyMsg)
 		st.publishEvent(events.EventError, events.ErrorData{Error: fmt.Errorf("%s", friendlyMsg), Context: "dial_local"})
 		return
@@ -568,6 +569,16 @@ func (st *SharedTunnel) copyBidirectionalWithReader(remote net.Conn, local net.C
 	}()
 
 	wg.Wait()
+}
+
+// resolveLocalAddr converts a local address to a full "host:port" string.
+// If addr already contains ":" it is used as-is (already host:port).
+// Otherwise "localhost:" is prepended (plain port number case).
+func resolveLocalAddr(addr string) string {
+	if strings.Contains(addr, ":") {
+		return addr
+	}
+	return "localhost:" + addr
 }
 
 // getLocalPortForHost extracts subdomain from host and returns the local port.

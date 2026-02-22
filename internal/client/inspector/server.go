@@ -230,7 +230,11 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request, idStr stri
 	}
 
 	// Reconstruct the request
-	reqURL := "http://localhost:" + s.localPort + exchange.Request.URL
+	localAddr := s.localPort
+	if !strings.Contains(localAddr, ":") {
+		localAddr = "localhost:" + localAddr
+	}
+	reqURL := "http://" + localAddr + exchange.Request.URL
 	req, err := http.NewRequest(exchange.Request.Method, reqURL, bytes.NewReader([]byte(exchange.Request.Body)))
 	if err != nil {
 		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)
@@ -419,7 +423,11 @@ func handleGlobalReplay(w http.ResponseWriter, r *http.Request, idStr string) {
 	}
 
 	// Reconstruct the request
-	reqURL := "http://localhost:" + port + exchange.Request.URL
+	localAddrGlobal := port
+	if !strings.Contains(localAddrGlobal, ":") {
+		localAddrGlobal = "localhost:" + localAddrGlobal
+	}
+	reqURL := "http://" + localAddrGlobal + exchange.Request.URL
 	req, err := http.NewRequest(exchange.Request.Method, reqURL, bytes.NewReader([]byte(exchange.Request.Body)))
 	if err != nil {
 		http.Error(w, "Failed to create request: "+err.Error(), http.StatusInternalServerError)

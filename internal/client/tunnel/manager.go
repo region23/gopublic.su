@@ -87,7 +87,7 @@ func (tm *TunnelManager) StartAll(ctx context.Context) error {
 	tunnelMap := make(map[string]string)
 	for _, mt := range tm.tunnels {
 		tunnelMap[mt.Subdomain] = mt.LocalPort
-		logger.Info("Configured tunnel '%s': localhost:%s -> %s", mt.Name, mt.LocalPort, mt.Subdomain)
+		logger.Info("Configured tunnel '%s': %s -> %s", mt.Name, resolveLocalAddr(mt.LocalPort), mt.Subdomain)
 	}
 
 	// Create shared tunnel
