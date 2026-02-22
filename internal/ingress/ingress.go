@@ -436,6 +436,12 @@ func (i *Ingress) serveDashboard(c *gin.Context) {
 		} else {
 			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
 		}
+	case "/api/bandwidth":
+		if c.Request.Method == http.MethodGet {
+			i.DashHandler.BandwidthStats(c)
+		} else {
+			c.String(http.StatusMethodNotAllowed, "Method Not Allowed")
+		}
 	case "/api/accept-terms":
 		if c.Request.Method == http.MethodPost {
 			i.DashHandler.AcceptTerms(c)
