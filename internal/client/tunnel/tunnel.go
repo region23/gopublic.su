@@ -82,6 +82,20 @@ func (t *Tunnel) SetTLSConfig(cfg *TLSConfig) {
 	t.TLSConfig = cfg
 }
 
+func clientTLSConfig(cfg *TLSConfig) *tls.Config {
+	tlsConfig := &tls.Config{}
+	if cfg == nil {
+		return tlsConfig
+	}
+
+	tlsConfig.InsecureSkipVerify = cfg.InsecureSkipVerify
+	if cfg.ServerName != "" {
+		tlsConfig.ServerName = cfg.ServerName
+	}
+
+	return tlsConfig
+}
+
 // SetForce sets the force flag to disconnect existing session.
 func (t *Tunnel) SetForce(force bool) {
 	t.Force = force
@@ -159,17 +173,7 @@ func (t *Tunnel) Start() error {
 		return t.handleSession(conn, connectStart)
 	}
 
-	// Build TLS config
-	tlsConfig := &tls.Config{}
-	if t.TLSConfig != nil {
-		tlsConfig.InsecureSkipVerify = t.TLSConfig.InsecureSkipVerify
-		if t.TLSConfig.ServerName != "" {
-			tlsConfig.ServerName = t.TLSConfig.ServerName
-		}
-	} else {
-		// Default: insecure for backward compatibility (TODO: make secure by default)
-		tlsConfig.InsecureSkipVerify = true
-	}
+	tlsConfig := clientTLSConfig(t.TLSConfig)
 
 	t.publishStatus("dialing", fmt.Sprintf("Connecting to %s (TLS)...", t.ServerAddr))
 	dialer := &net.Dialer{Timeout: dialTimeout}

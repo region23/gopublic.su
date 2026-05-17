@@ -150,16 +150,7 @@ func (st *SharedTunnel) Start(ctx context.Context) error {
 		return st.handleSession(ctx, conn, connectStart)
 	}
 
-	// Build TLS config
-	tlsConfig := &tls.Config{}
-	if st.TLSConfig != nil {
-		tlsConfig.InsecureSkipVerify = st.TLSConfig.InsecureSkipVerify
-		if st.TLSConfig.ServerName != "" {
-			tlsConfig.ServerName = st.TLSConfig.ServerName
-		}
-	} else {
-		tlsConfig.InsecureSkipVerify = true
-	}
+	tlsConfig := clientTLSConfig(st.TLSConfig)
 
 	st.publishStatus("dialing", fmt.Sprintf("Connecting to %s (TLS)...", st.ServerAddr))
 	dialer := &net.Dialer{Timeout: dialTimeout}
