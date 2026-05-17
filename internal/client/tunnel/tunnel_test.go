@@ -67,6 +67,28 @@ func TestTunnel_SetTLSConfig(t *testing.T) {
 	}
 }
 
+func TestClientTLSConfig_DefaultVerifiesCertificates(t *testing.T) {
+	cfg := clientTLSConfig(nil)
+
+	if cfg.InsecureSkipVerify {
+		t.Error("default TLS config should verify certificates")
+	}
+}
+
+func TestClientTLSConfig_UsesExplicitConfig(t *testing.T) {
+	cfg := clientTLSConfig(&TLSConfig{
+		InsecureSkipVerify: true,
+		ServerName:         "secure.example.com",
+	})
+
+	if !cfg.InsecureSkipVerify {
+		t.Error("InsecureSkipVerify should follow explicit config")
+	}
+	if cfg.ServerName != "secure.example.com" {
+		t.Errorf("expected secure.example.com, got %s", cfg.ServerName)
+	}
+}
+
 func TestTunnel_BoundDomains(t *testing.T) {
 	tun := NewTunnel("localhost:4443", "token", "3000")
 
